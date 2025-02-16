@@ -1,0 +1,10 @@
+{
+    "log": true,
+    "listen": "0.0.0.0:555",
+    "users": [
+        {
+            "name": "admin",
+            "uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
+        }
+    ]
+}

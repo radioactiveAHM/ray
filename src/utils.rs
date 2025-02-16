@@ -1,0 +1,27 @@
+pub fn convert_two_u8s_to_u16_be(bytes: [u8; 2]) -> u16 {
+    ((bytes[0] as u16) << 8) | bytes[1] as u16
+}
+
+pub fn convert_u16_to_two_u8s_be(integer: u16) -> [u8; 2] {
+    [(integer >> 8) as u8, integer as u8]
+}
+
+pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
+    unsafe { std::mem::transmute::<&'a T, &'static T>(r) }
+}
+
+pub struct Buffering<'a>(pub &'a mut [u8], pub usize);
+impl Buffering<'_> {
+    pub fn write(&mut self, buff: &[u8]) -> &mut Self {
+        self.0[self.1..self.1 + buff.len()].copy_from_slice(buff);
+        self.1 += buff.len();
+        self
+    }
+    pub fn get(&self) -> &[u8] {
+        &self.0[..self.1]
+    }
+    pub fn reset(&mut self) -> &mut Self {
+        self.1 = 0;
+        self
+    }
+}
