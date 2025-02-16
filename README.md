@@ -1,2 +1,47 @@
-# zray
-Vless protocol written in rust
+# Ray
+
+Vless server protocol written in rust. High performance, asynchronous, cheap and best for those who are avoiding complexity.
+
+## Transports
+
+- [x] HTTP
+- [x] HTTP Upgrade
+
+## Vless options
+
+- [x] TCP
+- [x] DNS UDP
+- [ ] XUDP
+- [ ] ICMP
+
+## Transports Configuration
+
+TCP
+
+```json
+    "transporter": "TCP"
+```
+
+HTTP
+
+```json
+    "transporter": {
+        "HTTP": {
+            "path": "/",
+            "host": "meow.com",
+            "method": "GET"
+        }
+    }
+```
+
+HttpUpgrade
+
+```json
+    "transporter": {
+        "HttpUpgrade": {
+            "path": "/",
+            "host": "meow.com",
+            "method": "GET"
+        }
+    }
+```

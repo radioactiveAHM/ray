@@ -1,10 +1,17 @@
 {
-    "log": true,
-    "listen": "0.0.0.0:555",
+    "log": false,
+    "listen": "0.0.0.0:80",
     "users": [
         {
             "name": "admin",
             "uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
         }
-    ]
+    ],
+    "transporter": {
+        "HttpUpgrade": {
+            "path": "/",
+            "method": "GET",
+            "host": "meow.com"
+        }
+    }
 }

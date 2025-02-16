@@ -1,13 +1,17 @@
-use std::{net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6}, str::FromStr};
+use std::{
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    str::FromStr,
+};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-mod  verror;
-mod utils;
-mod vless;
-mod config;
 mod auth;
+mod config;
+mod transporters;
 mod udputils;
+mod utils;
+mod verror;
+mod vless;
 
 #[tokio::main]
 async fn main() {
@@ -16,10 +20,10 @@ async fn main() {
     let config: &'static config::Config = utils::unsafe_staticref(&c);
 
     let tcp = tokio::net::TcpListener::bind(config.listen).await.unwrap();
-    
+
     loop {
         if let Ok((stream, _)) = tcp.accept().await {
-            tokio::spawn(async move{
+            tokio::spawn(async move {
                 if let Err(e) = stream_handler(stream, config).await {
                     if config.log {
                         println!("{e}");
@@ -30,9 +34,31 @@ async fn main() {
     }
 }
 
-async fn stream_handler(mut stream: tokio::net::TcpStream, config: &'static config::Config) -> tokio::io::Result<()> {
-    let mut buff = vec![0;1024*8];
-    let size = stream.read(&mut buff).await?;
+async fn stream_handler(
+    mut stream: tokio::net::TcpStream,
+    config: &'static config::Config,
+) -> tokio::io::Result<()> {
+    let mut buff = vec![0; 1024 * 8];
+    let mut size = stream.read(&mut buff).await?;
+
+    // Handle transporters
+    match &config.transporter {
+        config::Transporter::TCP => (),
+        config::Transporter::HttpUpgrade(http) => {
+            transporters::httpupgrade_transporter(http, &buff[..size], &mut stream).await?;
+            size = stream.read(&mut buff).await?;
+        }
+        config::Transporter::HTTP(http) => {
+            if let Some(p) = utils::catch_in_buff(b"\r\n\r\n", &buff) {
+                let head = &buff[..p.1];
+                transporters::http_transporter(http, head, &mut stream).await?;
+                size -= buff.drain(..p.1).len();
+                stream.write(b"HTTP/1.1 200 Ok\r\n\r\n").await?;
+            } else {
+                return Err(crate::verror::VError::TransporterError.into());
+            }
+        }
+    }
 
     let mut vless = vless::Vless::new(&buff[..size])?;
     if auth::authenticate(config, &vless) {
@@ -42,7 +68,7 @@ async fn stream_handler(mut stream: tokio::net::TcpStream, config: &'static conf
     match vless.target.2 {
         vless::SocketType::TCP => {
             handle_tcp(vless, buff, size, stream).await?;
-        },
+        }
         vless::SocketType::UDP => {
             vless.target.1 += 2;
             handle_udp(vless, buff, size, stream).await?;
@@ -52,8 +78,14 @@ async fn stream_handler(mut stream: tokio::net::TcpStream, config: &'static conf
     Ok(())
 }
 
-async fn handle_tcp(vless: vless::Vless, buff: Vec<u8>, size: usize, mut stream: tokio::net::TcpStream) -> tokio::io::Result<()> {
-    let mut target = tokio::net::TcpStream::connect(format!("{}:{}", &vless.target.0, vless.port)).await?;
+async fn handle_tcp(
+    vless: vless::Vless,
+    buff: Vec<u8>,
+    size: usize,
+    mut stream: tokio::net::TcpStream,
+) -> tokio::io::Result<()> {
+    let mut target =
+        tokio::net::TcpStream::connect(format!("{}:{}", &vless.target.0, vless.port)).await?;
 
     target.write(&buff[vless.target.1..size]).await?;
     target.flush().await?;
@@ -61,7 +93,7 @@ async fn handle_tcp(vless: vless::Vless, buff: Vec<u8>, size: usize, mut stream:
 
     let (mut client_read, mut client_write) = stream.split();
     let (mut target_read, mut target_write) = target.split();
-    
+
     client_write.write(&[0, 0]).await?;
     tokio::try_join!(
         tokio::io::copy(&mut client_read, &mut target_write),
@@ -71,7 +103,12 @@ async fn handle_tcp(vless: vless::Vless, buff: Vec<u8>, size: usize, mut stream:
     Ok(())
 }
 
-async fn handle_udp(vless: vless::Vless, buff: Vec<u8>, size: usize, mut stream: tokio::net::TcpStream) -> tokio::io::Result<()> {
+async fn handle_udp(
+    vless: vless::Vless,
+    buff: Vec<u8>,
+    size: usize,
+    mut stream: tokio::net::TcpStream,
+) -> tokio::io::Result<()> {
     let addr = std::net::SocketAddr::from_str(&format!("{}:{}", &vless.target.0, vless.port));
     if addr.is_err() {
         return Err(tokio::io::Error::other(addr.unwrap_err()));
@@ -90,7 +127,7 @@ async fn handle_udp(vless: vless::Vless, buff: Vec<u8>, size: usize, mut stream:
     udp.connect(addr.unwrap()).await?;
 
     if vless.target.1 <= size {
-        if !&buff[vless.target.1..size].is_empty(){
+        if !&buff[vless.target.1..size].is_empty() {
             udp.send(&buff[vless.target.1..size]).await?;
         }
     }

@@ -25,3 +25,12 @@ impl Buffering<'_> {
         self
     }
 }
+
+pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
+    if find.len() >= buff.len() {
+        return None;
+    }
+    buff.windows(find.len())
+        .position(|pre| pre == find)
+        .map(|a| (a, a + find.len()))
+}
