@@ -9,6 +9,8 @@ pub enum VError {
     AuthenticationFailed,
     WTF,
     TransporterError,
+    MuxError,
+    NoHost,
 }
 impl Display for VError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -20,6 +22,8 @@ impl Display for VError {
             VError::AuthenticationFailed => write!(f, "AuthenticationFailed"),
             VError::WTF => write!(f, "WTF"),
             VError::TransporterError => write!(f, "TransporterError"),
+            VError::MuxError => write!(f, "MuxError"),
+            VError::NoHost => write!(f, "NoHost"),
         }
     }
 }

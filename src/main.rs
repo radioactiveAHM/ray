@@ -1,12 +1,10 @@
-use std::{
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
-    str::FromStr,
-};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod auth;
 mod config;
+mod mux;
 mod transporters;
 mod udputils;
 mod utils;
@@ -60,18 +58,21 @@ async fn stream_handler(
         }
     }
 
-    let mut vless = vless::Vless::new(&buff[..size])?;
+    let mut vless = vless::Vless::new(&buff[..size]).await?;
     if auth::authenticate(config, &vless) {
         return Err(verror::VError::AuthenticationFailed.into());
     }
 
-    match vless.target.2 {
+    match vless.rt {
         vless::SocketType::TCP => {
             handle_tcp(vless, buff, size, stream).await?;
         }
         vless::SocketType::UDP => {
-            vless.target.1 += 2;
+            vless.target.as_mut().unwrap().1 += 2;
             handle_udp(vless, buff, size, stream).await?;
+        }
+        vless::SocketType::MUX => {
+            mux::mux_udp(stream).await?;
         }
     }
 
@@ -84,10 +85,10 @@ async fn handle_tcp(
     size: usize,
     mut stream: tokio::net::TcpStream,
 ) -> tokio::io::Result<()> {
-    let mut target =
-        tokio::net::TcpStream::connect(format!("{}:{}", &vless.target.0, vless.port)).await?;
+    let (target, body) = vless.target.as_ref().unwrap();
+    let mut target = tokio::net::TcpStream::connect(SocketAddr::new(*target, vless.port)).await?;
 
-    target.write(&buff[vless.target.1..size]).await?;
+    target.write(&buff[*body..size]).await?;
     target.flush().await?;
     drop(buff);
 
@@ -109,26 +110,22 @@ async fn handle_udp(
     size: usize,
     mut stream: tokio::net::TcpStream,
 ) -> tokio::io::Result<()> {
-    let addr = std::net::SocketAddr::from_str(&format!("{}:{}", &vless.target.0, vless.port));
-    if addr.is_err() {
-        return Err(tokio::io::Error::other(addr.unwrap_err()));
-    }
+    let (target, body) = vless.target.as_ref().unwrap();
     let addrtype = {
-        let a = addr.as_ref().unwrap();
-        if a.is_ipv4() {
+        if target.is_ipv4() {
             SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
-        } else if a.is_ipv6() {
+        } else if target.is_ipv6() {
             SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0))
         } else {
             return Err(tokio::io::Error::other(verror::VError::WTF));
         }
     };
     let udp = tokio::net::UdpSocket::bind(addrtype).await?;
-    udp.connect(addr.unwrap()).await?;
+    udp.connect(SocketAddr::new(*target, vless.port)).await?;
 
-    if vless.target.1 <= size {
-        if !&buff[vless.target.1..size].is_empty() {
-            udp.send(&buff[vless.target.1..size]).await?;
+    if *body <= size {
+        if !&buff[*body..size].is_empty() {
+            udp.send(&buff[*body..size]).await?;
         }
     }
     drop(buff);
