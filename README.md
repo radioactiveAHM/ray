@@ -11,7 +11,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 
 - [x] TCP 0x01
 - [x] DNS UDP 0x02
-- [ ] MUX 0x03 (Required for QUIC, calls and other)
+- [x] MUX 0x03 (Only for UDP)
 
 ## Transports Configuration
 
