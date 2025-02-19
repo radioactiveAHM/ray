@@ -10,7 +10,10 @@ pub enum VError {
     WTF,
     TransporterError,
     MuxError,
+    MailFormedMuxPacket,
     NoHost,
+    ResolveDnsFailed,
+    YameteKudasai
 }
 impl Display for VError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -23,7 +26,10 @@ impl Display for VError {
             VError::WTF => write!(f, "WTF"),
             VError::TransporterError => write!(f, "TransporterError"),
             VError::MuxError => write!(f, "MuxError"),
+            VError::MailFormedMuxPacket => write!(f, "MailFormedMuxPacket"),
             VError::NoHost => write!(f, "NoHost"),
+            VError::ResolveDnsFailed => write!(f, "ResolveDnsFailed"),
+            VError::YameteKudasai => write!(f, "YameteKudasai"),
         }
     }
 }

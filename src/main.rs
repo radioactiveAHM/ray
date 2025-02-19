@@ -36,7 +36,7 @@ async fn stream_handler(
     mut stream: tokio::net::TcpStream,
     config: &'static config::Config,
 ) -> tokio::io::Result<()> {
-    let mut buff = vec![0; 1024 * 8];
+    let mut buff: Vec<u8> = vec![0; 1024 * 8];
     let mut size = stream.read(&mut buff).await?;
 
     // Handle transporters
@@ -72,7 +72,7 @@ async fn stream_handler(
             handle_udp(vless, buff, size, stream).await?;
         }
         vless::SocketType::MUX => {
-            mux::mux_udp(stream).await?;
+            mux::mux_udp(stream, buff[..size].to_vec()).await?;
         }
     }
 
@@ -86,7 +86,7 @@ async fn handle_tcp(
     mut stream: tokio::net::TcpStream,
 ) -> tokio::io::Result<()> {
     let (target, body) = vless.target.as_ref().unwrap();
-    let mut target = tokio::net::TcpStream::connect(SocketAddr::new(*target, vless.port)).await?;
+    let mut target = tokio::net::TcpStream::connect(target).await?;
 
     target.write(&buff[*body..size]).await?;
     target.flush().await?;
@@ -121,7 +121,7 @@ async fn handle_udp(
         }
     };
     let udp = tokio::net::UdpSocket::bind(addrtype).await?;
-    udp.connect(SocketAddr::new(*target, vless.port)).await?;
+    udp.connect(target).await?;
 
     if *body <= size {
         if !&buff[*body..size].is_empty() {

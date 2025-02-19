@@ -1,6 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
-
-use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::{
     utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, Buffering},
@@ -69,7 +67,7 @@ impl AsyncWrite for UdpWriter<'_> {
         loop {
             if self.b.len() < head_size {
                 break;
-            } else if &buf[..head_size] != self.head {
+            } else if &self.b[..head_size] != self.head {
                 return std::task::Poll::Ready(Err(VError::MuxError.into()));
             }
             let psize =
@@ -121,7 +119,7 @@ pub async fn copy_t2u(
 ) -> tokio::io::Result<()> {
     let mut uw = UdpWriter {
         udp,
-        b: Vec::with_capacity(128),
+        b: Vec::with_capacity(1024*4),
         head,
     };
     tokio::io::copy(&mut r, &mut uw).await?;
@@ -130,96 +128,3 @@ pub async fn copy_t2u(
 }
 
 // ______________________________________________________________________________________
-
-async fn parse_target(buff: &[u8]) -> Result<(IpAddr, usize, usize), VError> {
-    match buff[9] {
-        1 => Ok((
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(
-                buff[10], buff[11], buff[12], buff[13],
-            )),
-            convert_two_u8s_to_u16_be([buff[14], buff[15]]) as usize,
-            16,
-        )),
-        2 => {
-            if let Ok(s) = core::str::from_utf8(&buff[11..buff[10] as usize + 11]) {
-                let resolve = tokio::net::lookup_host(format!("{s}:443")).await;
-                if resolve.is_err() {
-                    return Err(VError::NoHost);
-                }
-                let ip = resolve.unwrap().next();
-                if ip.is_none() {
-                    return Err(VError::NoHost);
-                }
-
-                Ok((
-                    ip.unwrap().ip(),
-                    convert_two_u8s_to_u16_be([
-                        buff[11 + buff[10] as usize],
-                        buff[12 + buff[10] as usize],
-                    ]) as usize,
-                    buff[10] as usize + 13,
-                ))
-            } else {
-                Err(VError::UTF8Err)
-            }
-        }
-        3 => Ok((
-            std::net::IpAddr::V6(std::net::Ipv6Addr::new(
-                convert_two_u8s_to_u16_be([buff[10], buff[11]]),
-                convert_two_u8s_to_u16_be([buff[12], buff[13]]),
-                convert_two_u8s_to_u16_be([buff[14], buff[15]]),
-                convert_two_u8s_to_u16_be([buff[16], buff[17]]),
-                convert_two_u8s_to_u16_be([buff[18], buff[19]]),
-                convert_two_u8s_to_u16_be([buff[20], buff[21]]),
-                convert_two_u8s_to_u16_be([buff[22], buff[23]]),
-                convert_two_u8s_to_u16_be([buff[24], buff[25]]),
-            )),
-            convert_two_u8s_to_u16_be([buff[26], buff[27]]) as usize,
-            28,
-        )),
-        _ => Err(VError::TargetErr),
-    }
-}
-
-pub async fn mux_udp(mut stream: tokio::net::TcpStream) -> tokio::io::Result<()> {
-    let (mut client_read, client_write) = stream.split();
-    let mut buff = [0; 1024 * 8];
-    let size = client_read.read(&mut buff).await?;
-
-    if buff[0] != 0 {
-        return Err(VError::Unknown.into());
-    }
-
-    let mut mux_id = [0; 6];
-    mux_id.copy_from_slice(&buff[1..7]);
-    let port = convert_two_u8s_to_u16_be([buff[7], buff[8]]);
-    let target = parse_target(&buff[..size]).await?;
-
-    if target.1 > buff.len() - buff[..target.2].len() {
-        return Err(VError::Unknown.into());
-    }
-
-    let addrtype = {
-        if target.0.is_ipv4() {
-            SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
-        } else if target.0.is_ipv6() {
-            SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0))
-        } else {
-            return Err(tokio::io::Error::other(VError::WTF));
-        }
-    };
-
-    let udp = tokio::net::UdpSocket::bind(addrtype).await?;
-    udp.connect(SocketAddr::new(target.0, port)).await?;
-
-    udp.send(&buff[target.2..size]).await?;
-
-    buff[4] = 2;
-
-    tokio::try_join!(
-        copy_t2u(&udp, client_read, &buff[..target.2 - 2]),
-        copy_u2t(&udp, client_write, &buff[..target.2 - 2])
-    )?;
-
-    Ok(())
-}

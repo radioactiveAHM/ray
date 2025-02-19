@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use crate::utils::convert_two_u8s_to_u16_be;
 use crate::verror::VError;
@@ -22,31 +22,32 @@ fn parse_socket(s: u8) -> Result<SocketType, VError> {
         Err(VError::UnknownSocket)
     }
 }
-async fn parse_target(buff: &[u8]) -> Result<(IpAddr, usize), VError> {
+async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize), VError> {
     match buff[21] {
         1 => Ok((
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(
-                buff[22], buff[23], buff[24], buff[25],
+            SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::new(buff[22], buff[23], buff[24], buff[25]),
+                port
             )),
             26,
         )),
         2 => {
             if let Ok(s) = core::str::from_utf8(&buff[23..buff[22] as usize + 23]) {
-                let resolve = tokio::net::lookup_host(format!("{s}:443")).await;
+                let resolve = tokio::net::lookup_host(format!("{s}:{port}")).await;
                 if resolve.is_err() {
+                    return Err(VError::ResolveDnsFailed);
+                }
+                let ip = resolve.unwrap().collect::<Vec<SocketAddr>>();
+                if ip.is_empty() {
                     return Err(VError::NoHost);
                 }
-                let ip = resolve.unwrap().next();
-                if ip.is_none() {
-                    return Err(VError::NoHost);
-                }
-                Ok((ip.unwrap().ip(), 23 + buff[22] as usize))
+                Ok((ip[0], 23 + buff[22] as usize))
             } else {
                 Err(VError::UTF8Err)
             }
         }
         3 => Ok((
-            std::net::IpAddr::V6(std::net::Ipv6Addr::new(
+            SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::new(
                 convert_two_u8s_to_u16_be([buff[10], buff[11]]),
                 convert_two_u8s_to_u16_be([buff[12], buff[13]]),
                 convert_two_u8s_to_u16_be([buff[14], buff[15]]),
@@ -55,7 +56,7 @@ async fn parse_target(buff: &[u8]) -> Result<(IpAddr, usize), VError> {
                 convert_two_u8s_to_u16_be([buff[20], buff[21]]),
                 convert_two_u8s_to_u16_be([buff[22], buff[23]]),
                 convert_two_u8s_to_u16_be([buff[24], buff[25]]),
-            )),
+            ), port, 0, 0)),
             38,
         )),
         _ => Err(VError::TargetErr),
@@ -71,9 +72,8 @@ pub enum SocketType {
 #[derive(Debug)]
 pub struct Vless {
     pub uuid: [u8; 16],
-    pub port: u16,
     pub rt: SocketType,
-    pub target: Option<(IpAddr, usize)>,
+    pub target: Option<(SocketAddr, usize)>,
 }
 
 impl Vless {
@@ -85,11 +85,10 @@ impl Vless {
             return Err(VError::Unknown);
         }
 
-        if buff.len() == 19 && buff[buff.len() - 1] == 3 {
+        if buff.len() >= 19 && buff[18] == 3 {
             // mux
             let mut v = Self {
                 uuid: [0; 16],
-                port: 0,
                 rt: parse_socket(buff[18])?,
                 target: None,
             };
@@ -102,12 +101,11 @@ impl Vless {
         if buff.len() < 20 {
             return Err(VError::Unknown);
         }
-
+        let port = convert_two_u8s_to_u16_be([buff[19], buff[20]]);
         let mut v = Self {
             uuid: [0; 16],
-            port: convert_two_u8s_to_u16_be([buff[19], buff[20]]),
             rt: parse_socket(buff[18])?,
-            target: Some(parse_target(buff).await?),
+            target: Some(parse_target(buff, port).await?),
         };
 
         v.uuid.copy_from_slice(&buff[1..17]);
