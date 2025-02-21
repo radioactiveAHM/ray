@@ -27,7 +27,7 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize), VEr
         1 => Ok((
             SocketAddr::V4(SocketAddrV4::new(
                 Ipv4Addr::new(buff[22], buff[23], buff[24], buff[25]),
-                port
+                port,
             )),
             26,
         )),
@@ -47,16 +47,21 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize), VEr
             }
         }
         3 => Ok((
-            SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::new(
-                convert_two_u8s_to_u16_be([buff[10], buff[11]]),
-                convert_two_u8s_to_u16_be([buff[12], buff[13]]),
-                convert_two_u8s_to_u16_be([buff[14], buff[15]]),
-                convert_two_u8s_to_u16_be([buff[16], buff[17]]),
-                convert_two_u8s_to_u16_be([buff[18], buff[19]]),
-                convert_two_u8s_to_u16_be([buff[20], buff[21]]),
-                convert_two_u8s_to_u16_be([buff[22], buff[23]]),
-                convert_two_u8s_to_u16_be([buff[24], buff[25]]),
-            ), port, 0, 0)),
+            SocketAddr::V6(SocketAddrV6::new(
+                Ipv6Addr::new(
+                    convert_two_u8s_to_u16_be([buff[10], buff[11]]),
+                    convert_two_u8s_to_u16_be([buff[12], buff[13]]),
+                    convert_two_u8s_to_u16_be([buff[14], buff[15]]),
+                    convert_two_u8s_to_u16_be([buff[16], buff[17]]),
+                    convert_two_u8s_to_u16_be([buff[18], buff[19]]),
+                    convert_two_u8s_to_u16_be([buff[20], buff[21]]),
+                    convert_two_u8s_to_u16_be([buff[22], buff[23]]),
+                    convert_two_u8s_to_u16_be([buff[24], buff[25]]),
+                ),
+                port,
+                0,
+                0,
+            )),
             38,
         )),
         _ => Err(VError::TargetErr),
@@ -64,6 +69,7 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize), VEr
 }
 
 #[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum SocketType {
     TCP,
     UDP,

@@ -26,6 +26,8 @@ pub struct User {
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub log: bool,
+    pub tcp_idle_timeout: u64,
+    pub udp_idle_timeout: u64,
     pub listen: SocketAddr,
     pub users: Vec<User>,
     pub transporter: Transporter,

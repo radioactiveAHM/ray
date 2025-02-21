@@ -7,13 +7,13 @@ pub enum VError {
     TargetErr,
     UnknownSocket,
     AuthenticationFailed,
-    WTF,
+    Wtf,
     TransporterError,
     MuxError,
     MailFormedMuxPacket,
     NoHost,
     ResolveDnsFailed,
-    YameteKudasai
+    YameteKudasai,
 }
 impl Display for VError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -23,7 +23,7 @@ impl Display for VError {
             VError::TargetErr => write!(f, "TargetErr"),
             VError::UnknownSocket => write!(f, "UnknownSocket"),
             VError::AuthenticationFailed => write!(f, "AuthenticationFailed"),
-            VError::WTF => write!(f, "WTF"),
+            VError::Wtf => write!(f, "WTF"),
             VError::TransporterError => write!(f, "TransporterError"),
             VError::MuxError => write!(f, "MuxError"),
             VError::MailFormedMuxPacket => write!(f, "MailFormedMuxPacket"),

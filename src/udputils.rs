@@ -1,6 +1,6 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-use crate::utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, Buffering};
+use crate::utils::{Buffering, convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
 pub async fn copy_u2t(
     udp: &tokio::net::UdpSocket,
@@ -11,7 +11,7 @@ pub async fn copy_u2t(
     let mut b = Buffering(&mut buff2, 0);
     let mut first = true;
     loop {
-        let size = udp.recv(&mut buff).await?;
+        let size = crate::utils::read_udp_timeout(udp, &mut buff).await?;
         let octat = convert_u16_to_two_u8s_be(size as u16);
         if first {
             w.write(

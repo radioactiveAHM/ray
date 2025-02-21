@@ -34,3 +34,17 @@ pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
         .position(|pre| pre == find)
         .map(|a| (a, a + find.len()))
 }
+
+pub async fn read_udp_timeout(
+    udp: &tokio::net::UdpSocket,
+    buff: &mut [u8],
+) -> tokio::io::Result<usize> {
+    match tokio::time::timeout(std::time::Duration::from_secs(crate::uit()), async {
+        udp.recv(buff).await
+    })
+    .await
+    {
+        Ok(size) => Ok(size?),
+        Err(e) => Err(tokio::io::Error::other(e)),
+    }
+}
