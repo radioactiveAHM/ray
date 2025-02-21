@@ -48,8 +48,7 @@ pub async fn copy_u2t(
 struct UdpWriter<'a> {
     udp: &'a tokio::net::UdpSocket,
     b: Vec<u8>,
-    head: &'a [u8],
-    b1: Option<Vec<u8>>
+    head: &'a [u8]
 }
 impl AsyncWrite for UdpWriter<'_> {
     fn poll_write(
@@ -59,11 +58,6 @@ impl AsyncWrite for UdpWriter<'_> {
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
         if buf.is_empty() {
             return std::task::Poll::Ready(Ok(0));
-        }
-        if let Some(b) = &self.b1{
-            let b_slice = b.clone();
-            self.b.extend_from_slice(&b_slice);
-            self.b1 = None
         }
         // write buff into vec
         self.b.extend_from_slice(buf);
@@ -130,11 +124,13 @@ pub async fn copy_t2u(
     head: &[u8],
     b1: Vec<u8>
 ) -> tokio::io::Result<()> {
+    let mut b = Vec::with_capacity(1024*4);
+    b.extend_from_slice(&b1);
+    drop(b1);
     let mut uw = UdpWriter {
         udp,
-        b: Vec::with_capacity(1024*4),
-        head,
-        b1: Some(b1)
+        b,
+        head
     };
     tokio::io::copy(&mut r, &mut uw).await?;
 
