@@ -143,16 +143,23 @@ async fn handle_tcp(
         ))
     };
 
-    let mut tcpwriter = tcp::TcpWriter {
+    let _ = client_write.write(&[0, 0]).await?;
+
+    // A timeout controller listens for both upload and download activities. If there is no upload or download activity for a specified duration, the connection will be closed.
+    let mut tcpwriter_client = tcp::TcpWriter {
+        hr: client_write,
+        signal: ch_snd.clone(),
+    };
+
+    let mut tcpwriter_target = tcp::TcpWriter {
         hr: target_write,
         signal: ch_snd,
     };
 
-    let _ = client_write.write(&[0, 0]).await?;
     tokio::try_join!(
         timeout_handler,
-        tokio::io::copy(&mut client_read, &mut tcpwriter),
-        tokio::io::copy(&mut target_read, &mut client_write),
+        tokio::io::copy(&mut client_read, &mut tcpwriter_target),
+        tokio::io::copy(&mut target_read, &mut tcpwriter_client),
     )?;
 
     Ok(())
