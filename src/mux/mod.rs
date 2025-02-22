@@ -3,7 +3,7 @@ mod xray;
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-use tokio::io::AsyncReadExt;
+use tokio::{io::AsyncReadExt, time::timeout};
 
 use crate::{utils::convert_two_u8s_to_u16_be, verror::VError};
 
@@ -68,6 +68,28 @@ pub async fn mux_udp(
     mut buffer: Vec<u8>,
 ) -> tokio::io::Result<()> {
     let (mut client_read, client_write) = stream.split();
+
+    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
+
+    let timeout_handler = async move {
+        loop {
+            match timeout(std::time::Duration::from_secs(crate::uit()), async {
+                ch_rcv.recv().await
+            })
+            .await
+            {
+                Err(_) => break,
+                Ok(None) => break,
+                _ => continue,
+            };
+        }
+
+        Err::<(), tokio::io::Error>(tokio::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Connection idle timeout",
+        ))
+    };
+
     if buffer.len() == 19 {
         drop(buffer);
         // singbox way
@@ -101,8 +123,9 @@ pub async fn mux_udp(
         }
 
         tokio::try_join!(
-            singbox::copy_t2u(&udp, client_read, &head),
-            singbox::copy_u2t(&udp, client_write, &head)
+            timeout_handler,
+            singbox::copy_t2u(&udp, client_read, &head, ch_snd.clone()),
+            singbox::copy_u2t(&udp, client_write, &head, ch_snd)
         )?;
     } else if buffer.len() > 19 {
         // xray way
@@ -134,8 +157,9 @@ pub async fn mux_udp(
         }
 
         tokio::try_join!(
-            xray::copy_t2u(&udp, client_read, &head, buffer),
-            xray::copy_u2t(&udp, client_write, &head)
+            timeout_handler,
+            xray::copy_t2u(&udp, client_read, &head, buffer, ch_snd.clone()),
+            xray::copy_u2t(&udp, client_write, &head, ch_snd)
         )?;
     }
 

@@ -191,11 +191,33 @@ async fn handle_udp(
     }
     drop(buff);
 
+    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
+
+    let timeout_handler = async move {
+        loop {
+            match timeout(std::time::Duration::from_secs(uit()), async {
+                ch_rcv.recv().await
+            })
+            .await
+            {
+                Err(_) => break,
+                Ok(None) => break,
+                _ => continue,
+            };
+        }
+
+        Err::<(), tokio::io::Error>(tokio::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Connection idle timeout",
+        ))
+    };
+
     // proxy UDP
     let (client_read, client_write) = stream.split();
     tokio::try_join!(
-        udputils::copy_t2u(&udp, client_read),
-        udputils::copy_u2t(&udp, client_write)
+        timeout_handler,
+        udputils::copy_t2u(&udp, client_read, ch_snd.clone()),
+        udputils::copy_u2t(&udp, client_write, ch_snd)
     )?;
 
     Ok(())

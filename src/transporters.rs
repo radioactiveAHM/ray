@@ -16,7 +16,7 @@ pub async fn httpupgrade_transporter(
 
         if let Some(head) = http.lines().next() {
             if head != format!("{} {} HTTP/1.1", chttp.method, chttp.path) {
-                stream
+                let _ = stream
                     .write(b"HTTP/1.1 404 Not Found\r\nconnection: close\r\n\r\n")
                     .await?;
                 return Err(crate::verror::VError::TransporterError.into());
@@ -28,7 +28,7 @@ pub async fn httpupgrade_transporter(
         return Err(crate::verror::VError::UTF8Err.into());
     }
 
-    stream.write(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n").await?;
+    let _ = stream.write(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n").await?;
     Ok(())
 }
 
@@ -47,7 +47,7 @@ pub async fn http_transporter(
         }
         if let Some(head) = http.lines().next() {
             if head != format!("{} {} HTTP/1.1", chttp.method, chttp.path) {
-                stream
+                let _ = stream
                     .write(b"HTTP/1.1 404 Not Found\r\nconnection: close\r\n\r\n")
                     .await?;
                 return Err(crate::verror::VError::TransporterError.into());
