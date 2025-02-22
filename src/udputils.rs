@@ -54,6 +54,9 @@ impl AsyncWrite for UdpWriter<'_> {
         // write buff into vec
         self.b.extend_from_slice(buf);
 
+        if self.b.len() > 1024 * 16 {
+            return std::task::Poll::Ready(Err(crate::verror::VError::BufferOverflow.into()));
+        }
         let _ = self.ch_snd.try_send(());
         loop {
             if self.b.len() < 3 {
@@ -107,7 +110,7 @@ pub async fn copy_t2u(
 ) -> tokio::io::Result<()> {
     let mut uw = UdpWriter {
         udp,
-        b: Vec::with_capacity(128),
+        b: Vec::with_capacity(1024 * 8),
         ch_snd,
     };
     tokio::io::copy(&mut r, &mut uw).await?;

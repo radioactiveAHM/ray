@@ -66,6 +66,9 @@ impl AsyncWrite for UdpWriter<'_> {
         }
         // write buff into vec
         self.b.extend_from_slice(buf);
+        if self.b.len() > 1024 * 16 {
+            return std::task::Poll::Ready(Err(crate::verror::VError::BufferOverflow.into()));
+        }
 
         let head_size = self.head.len();
 

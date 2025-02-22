@@ -14,6 +14,7 @@ pub enum VError {
     NoHost,
     ResolveDnsFailed,
     YameteKudasai,
+    BufferOverflow,
 }
 impl Display for VError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -30,6 +31,7 @@ impl Display for VError {
             VError::NoHost => write!(f, "NoHost"),
             VError::ResolveDnsFailed => write!(f, "ResolveDnsFailed"),
             VError::YameteKudasai => write!(f, "YameteKudasai"),
+            VError::BufferOverflow => write!(f, "BufferOverflow"),
         }
     }
 }
