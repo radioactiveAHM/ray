@@ -51,18 +51,30 @@ impl AsyncWrite for UdpWriter<'_> {
             return std::task::Poll::Ready(Ok(0));
         }
 
-        // write buff into vec
         self.b.extend_from_slice(buf);
 
+        // we don't want to blow up the memory
         if self.b.len() > 1024 * 16 {
             return std::task::Poll::Ready(Err(crate::verror::VError::BufferOverflow.into()));
         }
+
+        // send signal that connection is active
         let _ = self.ch_snd.try_send(());
+
         loop {
+            // must be at least 3 bytes which 0 and 1 are len
             if self.b.len() < 3 {
                 break;
             }
+
+            // udp packet size
             let psize = convert_two_u8s_to_u16_be([self.b[0], self.b[1]]) as usize;
+
+            // len must not be 0
+            if psize == 0 {
+                return std::task::Poll::Ready(Err(crate::verror::VError::MailFormedUdpPacket.into()));
+            }
+
             if psize <= self.b.len() - 2 {
                 // we have bytes to send
                 let packet = &self.b[2..psize + 2];

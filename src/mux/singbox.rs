@@ -73,21 +73,27 @@ impl AsyncWrite for UdpWriter<'_> {
         let head_size = self.head.len();
 
         let _ = self.ch_snd.try_send(());
+
         loop {
-            if self.b.len() < head_size {
+            if self.b.len() < head_size + 2 {
                 break;
             } else if &self.b[..head_size] != self.head {
-                return std::task::Poll::Ready(Err(VError::MuxError.into()));
+                return std::task::Poll::Ready(Err(VError::MailFormedSingboxMuxPacket.into()));
             }
+
             let psize =
                 convert_two_u8s_to_u16_be([self.b[head_size], self.b[head_size + 1]]) as usize;
+            if psize==0 {
+                return std::task::Poll::Ready(Err(VError::MailFormedSingboxMuxPacket.into()));
+            }
+
             if psize <= self.b.len() - head_size {
                 // we have bytes to send
-                let packet = &self.b[head_size + 2..psize + head_size + 2];
+                let packet = &self.b[head_size + 2..head_size + 2 + psize];
                 match self.udp.poll_send(cx, packet) {
                     std::task::Poll::Pending => continue,
                     std::task::Poll::Ready(Ok(_)) => {
-                        self.b.drain(0..psize + head_size + 2);
+                        self.b.drain(0..head_size + 2 + psize);
                         continue;
                     }
                     std::task::Poll::Ready(Err(e)) => {

@@ -9,12 +9,14 @@ pub enum VError {
     AuthenticationFailed,
     Wtf,
     TransporterError,
-    MuxError,
-    MailFormedMuxPacket,
+    MailFormedSingboxMuxPacket,
+    MailFormedXrayMuxPacket,
     NoHost,
     ResolveDnsFailed,
     YameteKudasai,
     BufferOverflow,
+    UdpDeadLoop,
+    MailFormedUdpPacket
 }
 impl Display for VError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -26,8 +28,10 @@ impl Display for VError {
             VError::AuthenticationFailed => write!(f, "AuthenticationFailed"),
             VError::Wtf => write!(f, "WTF"),
             VError::TransporterError => write!(f, "TransporterError"),
-            VError::MuxError => write!(f, "MuxError"),
-            VError::MailFormedMuxPacket => write!(f, "MailFormedMuxPacket"),
+            VError::MailFormedSingboxMuxPacket => write!(f, "MailFormedSingboxMuxPacket"),
+            VError::MailFormedXrayMuxPacket => write!(f, "MailFormedXrayMuxPacket"),
+            VError::UdpDeadLoop => write!(f, "UdpDeadLoop"),
+            VError::MailFormedUdpPacket => write!(f, "MailFormedUdpPacket"),
             VError::NoHost => write!(f, "NoHost"),
             VError::ResolveDnsFailed => write!(f, "ResolveDnsFailed"),
             VError::YameteKudasai => write!(f, "YameteKudasai"),

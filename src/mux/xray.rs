@@ -64,15 +64,16 @@ impl AsyncWrite for UdpWriter<'_> {
         if buf.is_empty() {
             return std::task::Poll::Ready(Ok(0));
         }
-        // write buff into vec
+
         self.b.extend_from_slice(buf);
         if self.b.len() > 1024 * 16 {
             return std::task::Poll::Ready(Err(crate::verror::VError::BufferOverflow.into()));
         }
 
         let _ = self.ch_snd.try_send(());
+
         loop {
-            if self.b.len() < 6 {
+            if self.b.len() < 8 {
                 break;
             }
             let head_size = {
@@ -83,17 +84,20 @@ impl AsyncWrite for UdpWriter<'_> {
                 }
             };
             if &self.b[..head_size] != self.head && self.b[..head_size] != [0, 4, 0, 0, 2, 1] {
-                return std::task::Poll::Ready(Err(VError::MailFormedMuxPacket.into()));
+                return std::task::Poll::Ready(Err(VError::MailFormedXrayMuxPacket.into()));
             }
             let psize =
                 convert_two_u8s_to_u16_be([self.b[head_size], self.b[head_size + 1]]) as usize;
+            if psize==0 {
+                return std::task::Poll::Ready(Err(VError::MailFormedXrayMuxPacket.into()));
+            }
             if psize <= self.b.len() - head_size {
                 // we have bytes to send
-                let packet = &self.b[head_size + 2..psize + head_size + 2];
+                let packet = &self.b[head_size + 2..head_size + 2 + psize];
                 match self.udp.poll_send(cx, packet) {
                     std::task::Poll::Pending => continue,
                     std::task::Poll::Ready(Ok(_)) => {
-                        self.b.drain(0..psize + head_size + 2);
+                        self.b.drain(0..head_size + 2 + psize);
                         continue;
                     }
                     std::task::Poll::Ready(Err(e)) => {
