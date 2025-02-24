@@ -61,7 +61,12 @@ impl AsyncWrite for UdpWriter<'_> {
         // send signal that connection is active
         let _ = self.ch_snd.try_send(());
 
+        let mut deadloop = 0u8;
         loop {
+            if deadloop == 20 {
+                return std::task::Poll::Ready(Err(crate::verror::VError::UdpDeadLoop.into()));
+            }
+            deadloop += 1;
             // must be at least 3 bytes which 0 and 1 are len
             if self.b.len() < 3 {
                 break;

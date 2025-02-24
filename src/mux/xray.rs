@@ -72,7 +72,13 @@ impl AsyncWrite for UdpWriter<'_> {
 
         let _ = self.ch_snd.try_send(());
 
+        let mut deadloop = 0u8;
         loop {
+            if deadloop == 20 {
+                return std::task::Poll::Ready(Err(crate::verror::VError::UdpDeadLoop.into()));
+            }
+            deadloop += 1;
+
             if self.b.len() < 8 {
                 break;
             }
