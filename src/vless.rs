@@ -55,14 +55,14 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize), VEr
         3 => Ok((
             SocketAddr::V6(SocketAddrV6::new(
                 Ipv6Addr::new(
-                    convert_two_u8s_to_u16_be([buff[10], buff[11]]),
-                    convert_two_u8s_to_u16_be([buff[12], buff[13]]),
-                    convert_two_u8s_to_u16_be([buff[14], buff[15]]),
-                    convert_two_u8s_to_u16_be([buff[16], buff[17]]),
-                    convert_two_u8s_to_u16_be([buff[18], buff[19]]),
-                    convert_two_u8s_to_u16_be([buff[20], buff[21]]),
                     convert_two_u8s_to_u16_be([buff[22], buff[23]]),
                     convert_two_u8s_to_u16_be([buff[24], buff[25]]),
+                    convert_two_u8s_to_u16_be([buff[26], buff[27]]),
+                    convert_two_u8s_to_u16_be([buff[28], buff[29]]),
+                    convert_two_u8s_to_u16_be([buff[30], buff[31]]),
+                    convert_two_u8s_to_u16_be([buff[32], buff[33]]),
+                    convert_two_u8s_to_u16_be([buff[34], buff[35]]),
+                    convert_two_u8s_to_u16_be([buff[36], buff[37]]),
                 ),
                 port,
                 0,
