@@ -3,9 +3,9 @@ mod xray;
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-use tokio::{io::AsyncReadExt, time::timeout};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::timeout};
 
-use crate::{utils::convert_two_u8s_to_u16_be, verror::VError};
+use crate::{utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be}, verror::VError};
 
 async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usize), VError> {
     match buff[9] {
@@ -69,7 +69,7 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usiz
     }
 }
 
-pub async fn mux_udp(
+pub async fn xudp(
     mut stream: tokio::net::TcpStream,
     mut buffer: Vec<u8>,
 ) -> tokio::io::Result<()> {
@@ -131,7 +131,7 @@ pub async fn mux_udp(
         tokio::try_join!(
             timeout_handler,
             singbox::copy_t2u(&udp, client_read, &head, ch_snd.clone()),
-            singbox::copy_u2t(&udp, client_write, &head, ch_snd)
+            copy_u2t(&udp, client_write, &head, ch_snd)
         )?;
     } else if buffer.len() > 19 {
         // xray way
@@ -165,9 +165,39 @@ pub async fn mux_udp(
         tokio::try_join!(
             timeout_handler,
             xray::copy_t2u(&udp, client_read, &head, buffer, ch_snd.clone()),
-            xray::copy_u2t(&udp, client_write, &head, ch_snd)
+            copy_u2t(&udp, client_write, &head, ch_snd)
         )?;
     }
 
     Ok(())
+}
+
+pub async fn copy_u2t(
+    udp: &tokio::net::UdpSocket,
+    mut w: tokio::net::tcp::WriteHalf<'_>,
+    head: &[u8],
+    ch_snd: tokio::sync::mpsc::Sender<()>,
+) -> tokio::io::Result<()> {
+    let mut buff = [0; 1024 * 8];
+
+    {
+        // write first packet
+        let size = udp.recv(&mut buff[2+head.len()+2..]).await?;
+        let _ = ch_snd.try_send(());
+        let octat = convert_u16_to_two_u8s_be(size as u16);
+        buff[2..head.len()+2].copy_from_slice(head);
+        buff[2+head.len()..2+head.len()+2].copy_from_slice(&octat);
+        let _ = w.write(&buff[..size+2+head.len()+2]).await?;
+        w.flush().await?;
+    }
+
+    buff[..head.len()].copy_from_slice(head);
+    loop {
+        let size = udp.recv(&mut buff[head.len()+2..]).await?;
+        let _ = ch_snd.try_send(());
+        let octat = convert_u16_to_two_u8s_be(size as u16);
+        buff[head.len()..head.len()+2].copy_from_slice(&octat);
+        let _ = w.write(&buff[..size+head.len()+2]).await?;
+        w.flush().await?;
+    }
 }

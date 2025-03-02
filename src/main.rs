@@ -90,7 +90,7 @@ async fn stream_handler(
             vless.target.as_mut().unwrap().1 += 2;
             handle_udp(vless, buff, size, stream).await
         }
-        vless::SocketType::MUX => mux::mux_udp(stream, buff[..size].to_vec()).await,
+        vless::SocketType::MUX => mux::xudp(stream, buff[..size].to_vec()).await,
     } {
         if log() {
             println!("{user_addr}: {e}")

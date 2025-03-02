@@ -1,6 +1,6 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-use crate::utils::{Buffering, convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
+use crate::utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
 pub async fn copy_u2t(
     udp: &tokio::net::UdpSocket,
@@ -8,28 +8,23 @@ pub async fn copy_u2t(
     ch_snd: tokio::sync::mpsc::Sender<()>,
 ) -> tokio::io::Result<()> {
     let mut buff = [0; 1024 * 8];
-    let mut buff2 = [0; 1024 * 8];
-    let mut b = Buffering(&mut buff2, 0);
-    let mut first = true;
-    loop {
-        let size = udp.recv(&mut buff).await?;
+
+    {
+        // write first packet
+        let size = udp.recv(&mut buff[4..]).await?;
         let _ = ch_snd.try_send(());
         let octat = convert_u16_to_two_u8s_be(size as u16);
-        if first {
-            let _ = w
-                .write(
-                    b.reset()
-                        .write(&[0, 0, octat[0], octat[1]])
-                        .write(&buff[..size])
-                        .get(),
-                )
-                .await?;
-            first = false;
-        } else {
-            let _ = w
-                .write(b.reset().write(&octat).write(&buff[..size]).get())
-                .await?;
-        }
+        buff[2..4].copy_from_slice(&octat);
+        let _ = w.write(&buff[..size+4]).await?;
+        w.flush().await?;
+    }
+
+    loop {
+        let size = udp.recv(&mut buff[2..]).await?;
+        let _ = ch_snd.try_send(());
+        let octat = convert_u16_to_two_u8s_be(size as u16);
+        buff[0..2].copy_from_slice(&octat);
+        let _ = w.write(&buff[..size+2]).await?;
         w.flush().await?;
     }
 }
