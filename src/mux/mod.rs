@@ -138,7 +138,7 @@ pub async fn xudp(
         buffer.drain(..19);
 
         let udp: tokio::net::UdpSocket;
-        let head: Vec<u8>;
+        let mut head: Vec<u8>;
         {
             let mut mux_id = [0; 6];
             mux_id.copy_from_slice(&buffer[1..7]);
@@ -160,6 +160,13 @@ pub async fn xudp(
 
             buffer[4] = 2;
             head = buffer[..target.2 - 2].to_vec();
+            head[1] = 12;
+
+            // packet with no size (I HATE XUDP)
+            if buffer[1] == 20 {
+                udp.send(&buffer[target.2..]).await?;
+                buffer.clear();
+            }
         }
 
         tokio::try_join!(

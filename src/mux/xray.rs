@@ -47,7 +47,7 @@ impl AsyncWrite for UdpWriter<'_> {
                     self.head.len()
                 }
             };
-            if &self.b[..head_size] != self.head && self.b[..head_size] != [0, 4, 0, 0, 2, 1] {
+            if &self.b[..head_size] != self.head && self.b[..6] != [0, 4, 0, 0, 2, 1] {
                 return std::task::Poll::Ready(Err(VError::MailFormedXrayMuxPacket.into()));
             }
             let psize =
@@ -70,7 +70,6 @@ impl AsyncWrite for UdpWriter<'_> {
                     }
                 }
             } else {
-                // empty or incomplete bytes
                 break;
             }
         }
