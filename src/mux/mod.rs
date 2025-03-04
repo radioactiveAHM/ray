@@ -3,9 +3,15 @@ mod xray;
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::timeout};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::timeout,
+};
 
-use crate::{utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be}, verror::VError};
+use crate::{
+    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
+    verror::VError,
+};
 
 async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usize), VError> {
     match buff[9] {
@@ -69,10 +75,7 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usiz
     }
 }
 
-pub async fn xudp(
-    mut stream: tokio::net::TcpStream,
-    mut buffer: Vec<u8>,
-) -> tokio::io::Result<()> {
+pub async fn xudp(mut stream: tokio::net::TcpStream, mut buffer: Vec<u8>) -> tokio::io::Result<()> {
     let (mut client_read, client_write) = stream.split();
 
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
@@ -189,22 +192,22 @@ pub async fn copy_u2t(
 
     {
         // write first packet
-        let size = udp.recv(&mut buff[2+head.len()+2..]).await?;
+        let size = udp.recv(&mut buff[2 + head.len() + 2..]).await?;
         let _ = ch_snd.try_send(());
         let octat = convert_u16_to_two_u8s_be(size as u16);
-        buff[2..head.len()+2].copy_from_slice(head);
-        buff[2+head.len()..2+head.len()+2].copy_from_slice(&octat);
-        let _ = w.write(&buff[..size+2+head.len()+2]).await?;
+        buff[2..head.len() + 2].copy_from_slice(head);
+        buff[2 + head.len()..2 + head.len() + 2].copy_from_slice(&octat);
+        let _ = w.write(&buff[..size + 2 + head.len() + 2]).await?;
         w.flush().await?;
     }
 
     buff[..head.len()].copy_from_slice(head);
     loop {
-        let size = udp.recv(&mut buff[head.len()+2..]).await?;
+        let size = udp.recv(&mut buff[head.len() + 2..]).await?;
         let _ = ch_snd.try_send(());
         let octat = convert_u16_to_two_u8s_be(size as u16);
-        buff[head.len()..head.len()+2].copy_from_slice(&octat);
-        let _ = w.write(&buff[..size+head.len()+2]).await?;
+        buff[head.len()..head.len() + 2].copy_from_slice(&octat);
+        let _ = w.write(&buff[..size + head.len() + 2]).await?;
         w.flush().await?;
     }
 }

@@ -95,10 +95,8 @@ async fn stream_handler(
         if log() {
             println!("{user_addr}: {e}")
         }
-    } else {
-        if log() {
-            println!("{user_addr}: closed connection")
-        }
+    } else if log() {
+        println!("{user_addr}: closed connection")
     }
 
     Ok(())

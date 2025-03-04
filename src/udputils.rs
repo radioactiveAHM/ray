@@ -15,7 +15,7 @@ pub async fn copy_u2t(
         let _ = ch_snd.try_send(());
         let octat = convert_u16_to_two_u8s_be(size as u16);
         buff[2..4].copy_from_slice(&octat);
-        let _ = w.write(&buff[..size+4]).await?;
+        let _ = w.write(&buff[..size + 4]).await?;
         w.flush().await?;
     }
 
@@ -24,7 +24,7 @@ pub async fn copy_u2t(
         let _ = ch_snd.try_send(());
         let octat = convert_u16_to_two_u8s_be(size as u16);
         buff[0..2].copy_from_slice(&octat);
-        let _ = w.write(&buff[..size+2]).await?;
+        let _ = w.write(&buff[..size + 2]).await?;
         w.flush().await?;
     }
 }
@@ -72,7 +72,9 @@ impl AsyncWrite for UdpWriter<'_> {
 
             // len must not be 0
             if psize == 0 {
-                return std::task::Poll::Ready(Err(crate::verror::VError::MailFormedUdpPacket.into()));
+                return std::task::Poll::Ready(Err(
+                    crate::verror::VError::MailFormedUdpPacket.into()
+                ));
             }
 
             if psize <= self.b.len() - 2 {

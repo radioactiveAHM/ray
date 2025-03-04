@@ -16,7 +16,7 @@ pub enum VError {
     YameteKudasai,
     BufferOverflow,
     UdpDeadLoop,
-    MailFormedUdpPacket
+    MailFormedUdpPacket,
 }
 impl Display for VError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -1,7 +1,7 @@
 use tokio::io::AsyncWriteExt;
 
 pub async fn httpupgrade_transporter(
-    chttp: &crate::config::HTTP,
+    chttp: &crate::config::Http,
     buff: &[u8],
     stream: &mut tokio::net::TcpStream,
 ) -> tokio::io::Result<()> {
@@ -33,7 +33,7 @@ pub async fn httpupgrade_transporter(
 }
 
 pub async fn http_transporter(
-    chttp: &crate::config::HTTP,
+    chttp: &crate::config::Http,
     buff: &[u8],
     stream: &mut tokio::net::TcpStream,
 ) -> tokio::io::Result<()> {

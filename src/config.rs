@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 #[derive(serde::Deserialize)]
 #[allow(dead_code)]
-pub struct HTTP {
+pub struct Http {
     pub path: String,
     pub method: String,
     pub host: Option<String>,
@@ -10,10 +10,11 @@ pub struct HTTP {
 
 #[derive(serde::Deserialize)]
 #[allow(dead_code)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum Transporter {
     TCP,
-    HTTP(HTTP),
-    HttpUpgrade(HTTP),
+    HTTP(Http),
+    HttpUpgrade(Http),
 }
 
 #[derive(serde::Deserialize)]

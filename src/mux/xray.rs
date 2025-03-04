@@ -1,9 +1,6 @@
 use tokio::io::AsyncWrite;
 
-use crate::{
-    utils::convert_two_u8s_to_u16_be,
-    verror::VError,
-};
+use crate::{utils::convert_two_u8s_to_u16_be, verror::VError};
 
 // ______________________________________________________________________________________
 
@@ -52,7 +49,7 @@ impl AsyncWrite for UdpWriter<'_> {
             }
             let psize =
                 convert_two_u8s_to_u16_be([self.b[head_size], self.b[head_size + 1]]) as usize;
-            if psize==0 {
+            if psize == 0 {
                 return std::task::Poll::Ready(Err(VError::MailFormedXrayMuxPacket.into()));
             }
             if psize <= self.b.len() - head_size {
