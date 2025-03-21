@@ -17,14 +17,10 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 
 ```json
 {
-    // Enable logging
-    "log": true,
-    // TCP idle timeout in seconds (connection closes after 30 seconds of inactivity)
-    "tcp_idle_timeout": 30,
-    // UDP idle timeout in seconds
-    "udp_idle_timeout": 15,
-    // Server listening address and port. Use [::] for linux.
-    "listen": "0.0.0.0:80",
+    "log": true, // Enable logging
+    "tcp_idle_timeout": 30, // TCP idle timeout in seconds (connection closes after 30 seconds of inactivity)
+    "udp_idle_timeout": 15, // UDP idle timeout in seconds
+    "listen": "0.0.0.0:80", // Server listening address and port. Use [::] for linux.
     // User list
     "users": [
         {
@@ -32,8 +28,14 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
             "uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
         }
     ],
-    // Transport protocol
-    "transporter": "TCP"
+    "transporter": "TCP", // Transport protocol
+    // TLS Configuration
+    "tls": {
+        "enable": false, // Enable tls
+        "alpn": ["h2", "http/1.1"],
+        "certificate": "cert.pem", // Certificate Path
+        "key": "key.pem" // Key Path
+    }
 }
 ```
 

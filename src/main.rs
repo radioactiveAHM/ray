@@ -1,21 +1,27 @@
-use std::{net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6}, sync::Arc};
+use std::{
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    sync::Arc,
+};
 
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     time::timeout,
 };
-use tokio_rustls::{rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer}, TlsAcceptor};
+use tokio_rustls::{
+    TlsAcceptor,
+    rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+};
 
 mod auth;
 mod config;
 mod mux;
 mod tcp;
+mod tls;
 mod transporters;
 mod udputils;
 mod utils;
 mod verror;
 mod vless;
-mod tls;
 
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
@@ -43,31 +49,38 @@ async fn main() {
 
     if config.tls.enable {
         // with tls
-        let certs = CertificateDer::pem_file_iter(&config.tls.certificate).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        let certs = CertificateDer::pem_file_iter(&config.tls.certificate)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         let key = PrivateKeyDer::from_pem_file(&config.tls.key).unwrap();
-        let mut c: tokio_rustls::rustls::ServerConfig = tokio_rustls::rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(certs, key)
-        .unwrap();
-        c.alpn_protocols = config.tls.alpn.iter().map(|p| p.as_bytes().to_vec()).collect();
+        let mut c: tokio_rustls::rustls::ServerConfig =
+            tokio_rustls::rustls::ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .unwrap();
+        c.alpn_protocols = config
+            .tls
+            .alpn
+            .iter()
+            .map(|p| p.as_bytes().to_vec())
+            .collect();
         let acceptor = TlsAcceptor::from(Arc::new(c));
-        
+
         loop {
-            loop {
-                match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
-                    Ok(tc) => {
-                        tokio::spawn(async move {
-                            if let Err(e) = tls_handler(tc, config).await {
-                                if log(){
-                                    println!("DoH server<TLS>: {e}")
-                                }
+            match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
+                Ok(tc) => {
+                    tokio::spawn(async move {
+                        if let Err(e) = tls_handler(tc, config).await {
+                            if log() {
+                                println!("DoH server<TLS>: {e}")
                             }
-                        });
-                    }
-                    Err(e) => {
-                        if log() {
-                            println!("DoH server<TLS>: {e}")
                         }
+                    });
+                }
+                Err(e) => {
+                    if log() {
+                        println!("DoH server<TLS>: {e}")
                     }
                 }
             }
@@ -90,22 +103,21 @@ async fn main() {
     }
 }
 
-async fn tls_handler(tc: tls::Tc, config: &'static config::Config)-> tokio::io::Result<()> {
+async fn tls_handler(tc: tls::Tc, config: &'static config::Config) -> tokio::io::Result<()> {
     let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
     let stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream> = tc.accept().await?;
 
-    stream_handler(
-        stream,
-        config,
-        peer_addr
-    ).await
+    stream_handler(stream, config, peer_addr).await
 }
 
-async fn stream_handler <S>(
+async fn stream_handler<S>(
     mut stream: S,
     config: &'static config::Config,
-    peer_addr: SocketAddr
-) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send + 'static {
+    peer_addr: SocketAddr,
+) -> tokio::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let mut buff: Vec<u8> = vec![0; 1024 * 8];
     let mut size = stream.read(&mut buff).await?;
 
@@ -151,13 +163,16 @@ async fn stream_handler <S>(
     Ok(())
 }
 
-async fn handle_tcp <S>(
+async fn handle_tcp<S>(
     vless: vless::Vless,
     buff: Vec<u8>,
     size: usize,
     stream: S,
     config: &'static config::Config,
-) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send + 'static {
+) -> tokio::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let (target, body) = vless.target.as_ref().unwrap();
     let mut target = tokio::net::TcpStream::connect(target).await?;
 
@@ -212,12 +227,15 @@ async fn handle_tcp <S>(
     Ok(())
 }
 
-async fn handle_udp <S> (
+async fn handle_udp<S>(
     vless: vless::Vless,
     buff: Vec<u8>,
     size: usize,
     stream: S,
-) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send + 'static {
+) -> tokio::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let (target, body) = vless.target.as_ref().unwrap();
     let addrtype = {
         if target.is_ipv4() {

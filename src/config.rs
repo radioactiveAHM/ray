@@ -5,7 +5,7 @@ pub struct Tls {
     pub enable: bool,
     pub alpn: Vec<String>,
     pub certificate: String,
-    pub key: String
+    pub key: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -40,7 +40,7 @@ pub struct Config {
     pub listen: SocketAddr,
     pub users: Vec<User>,
     pub transporter: Transporter,
-    pub tls: Tls
+    pub tls: Tls,
 }
 
 pub fn load_config() -> Config {

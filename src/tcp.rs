@@ -33,7 +33,10 @@ pub struct TcpWriterGeneric<W> {
     pub hr: tokio::io::WriteHalf<W>,
     pub signal: tokio::sync::mpsc::Sender<()>,
 }
-impl<W> tokio::io::AsyncWrite for TcpWriterGeneric<W> where W: AsyncWrite + Unpin + Send {
+impl<W> tokio::io::AsyncWrite for TcpWriterGeneric<W>
+where
+    W: AsyncWrite + Unpin + Send,
+{
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

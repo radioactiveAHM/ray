@@ -2,11 +2,14 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
-pub async fn copy_u2t <W> (
+pub async fn copy_u2t<W>(
     udp: &tokio::net::UdpSocket,
     mut w: tokio::io::WriteHalf<W>,
     ch_snd: tokio::sync::mpsc::Sender<()>,
-) -> tokio::io::Result<()> where W: AsyncWrite + Unpin + Send {
+) -> tokio::io::Result<()>
+where
+    W: AsyncWrite + Unpin + Send,
+{
     let mut buff = [0; 1024 * 8];
 
     {
@@ -117,11 +120,14 @@ impl AsyncWrite for UdpWriter<'_> {
     }
 }
 
-pub async fn copy_t2u <R> (
+pub async fn copy_t2u<R>(
     udp: &tokio::net::UdpSocket,
     mut r: tokio::io::ReadHalf<R>,
     ch_snd: tokio::sync::mpsc::Sender<()>,
-) -> tokio::io::Result<()> where R: AsyncRead + Unpin + Send {
+) -> tokio::io::Result<()>
+where
+    R: AsyncRead + Unpin + Send,
+{
     let mut uw = UdpWriter {
         udp,
         b: Vec::with_capacity(1024 * 8),

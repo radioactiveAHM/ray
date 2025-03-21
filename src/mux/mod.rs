@@ -75,7 +75,10 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usiz
     }
 }
 
-pub async fn xudp <S> (stream: S, mut buffer: Vec<u8>) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send + 'static {
+pub async fn xudp<S>(stream: S, mut buffer: Vec<u8>) -> tokio::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let (mut client_read, client_write) = tokio::io::split(stream);
 
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
@@ -182,12 +185,15 @@ pub async fn xudp <S> (stream: S, mut buffer: Vec<u8>) -> tokio::io::Result<()> 
     Ok(())
 }
 
-pub async fn copy_u2t <W> (
+pub async fn copy_u2t<W>(
     udp: &tokio::net::UdpSocket,
     mut w: tokio::io::WriteHalf<W>,
     head: &[u8],
     ch_snd: tokio::sync::mpsc::Sender<()>,
-) -> tokio::io::Result<()> where W: AsyncWrite + Unpin + Send {
+) -> tokio::io::Result<()>
+where
+    W: AsyncWrite + Unpin + Send,
+{
     let mut buff = [0; 1024 * 8];
 
     {

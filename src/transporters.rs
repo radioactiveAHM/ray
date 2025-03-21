@@ -1,10 +1,13 @@
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-pub async fn httpupgrade_transporter <S>(
+pub async fn httpupgrade_transporter<S>(
     chttp: &crate::config::Http,
     buff: &[u8],
     stream: &mut S,
-) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send {
+) -> tokio::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
     if let Ok(http) = core::str::from_utf8(buff) {
         // if there is no host
         // i'm too lazy to parse http headers :D
@@ -32,11 +35,14 @@ pub async fn httpupgrade_transporter <S>(
     Ok(())
 }
 
-pub async fn http_transporter <S>(
+pub async fn http_transporter<S>(
     chttp: &crate::config::Http,
     buff: &[u8],
     stream: &mut S,
-) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send {
+) -> tokio::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
     if let Ok(http) = core::str::from_utf8(buff) {
         // if there is no host
         // i'm too lazy to parse http headers :D
