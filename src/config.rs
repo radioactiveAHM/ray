@@ -1,6 +1,14 @@
 use std::net::SocketAddr;
 
 #[derive(serde::Deserialize)]
+pub struct Tls {
+    pub enable: bool,
+    pub alpn: Vec<String>,
+    pub certificate: String,
+    pub key: String
+}
+
+#[derive(serde::Deserialize)]
 #[allow(dead_code)]
 pub struct Http {
     pub path: String,
@@ -32,6 +40,7 @@ pub struct Config {
     pub listen: SocketAddr,
     pub users: Vec<User>,
     pub transporter: Transporter,
+    pub tls: Tls
 }
 
 pub fn load_config() -> Config {

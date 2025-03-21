@@ -1,4 +1,4 @@
-use tokio::io::AsyncWrite;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{utils::convert_two_u8s_to_u16_be, verror::VError};
 
@@ -91,13 +91,13 @@ impl AsyncWrite for UdpWriter<'_> {
     }
 }
 
-pub async fn copy_t2u(
+pub async fn copy_t2u <R> (
     udp: &tokio::net::UdpSocket,
-    mut r: tokio::net::tcp::ReadHalf<'_>,
+    mut r: tokio::io::ReadHalf<R>,
     head: &[u8],
     b1: Vec<u8>,
     ch_snd: tokio::sync::mpsc::Sender<()>,
-) -> tokio::io::Result<()> {
+) -> tokio::io::Result<()> where R: AsyncRead + Unpin + Send {
     let mut b = Vec::with_capacity(1024 * 4);
     b.extend_from_slice(&b1);
     drop(b1);

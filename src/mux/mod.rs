@@ -4,7 +4,7 @@ mod xray;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     time::timeout,
 };
 
@@ -75,8 +75,8 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usiz
     }
 }
 
-pub async fn xudp(mut stream: tokio::net::TcpStream, mut buffer: Vec<u8>) -> tokio::io::Result<()> {
-    let (mut client_read, client_write) = stream.split();
+pub async fn xudp <S> (stream: S, mut buffer: Vec<u8>) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send + 'static {
+    let (mut client_read, client_write) = tokio::io::split(stream);
 
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
 
@@ -182,12 +182,12 @@ pub async fn xudp(mut stream: tokio::net::TcpStream, mut buffer: Vec<u8>) -> tok
     Ok(())
 }
 
-pub async fn copy_u2t(
+pub async fn copy_u2t <W> (
     udp: &tokio::net::UdpSocket,
-    mut w: tokio::net::tcp::WriteHalf<'_>,
+    mut w: tokio::io::WriteHalf<W>,
     head: &[u8],
     ch_snd: tokio::sync::mpsc::Sender<()>,
-) -> tokio::io::Result<()> {
+) -> tokio::io::Result<()> where W: AsyncWrite + Unpin + Send {
     let mut buff = [0; 1024 * 8];
 
     {

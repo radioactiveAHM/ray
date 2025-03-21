@@ -1,9 +1,10 @@
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::{net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6}, sync::Arc};
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     time::timeout,
 };
+use tokio_rustls::{rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer}, TlsAcceptor};
 
 mod auth;
 mod config;
@@ -14,6 +15,7 @@ mod udputils;
 mod utils;
 mod verror;
 mod vless;
+mod tls;
 
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
@@ -39,23 +41,71 @@ async fn main() {
 
     let tcp = tokio::net::TcpListener::bind(config.listen).await.unwrap();
 
-    loop {
-        if let Ok((stream, _)) = tcp.accept().await {
-            tokio::spawn(async move {
-                if let Err(e) = stream_handler(stream, config).await {
-                    if log() {
-                        println!("{e}");
+    if config.tls.enable {
+        // with tls
+        let certs = CertificateDer::pem_file_iter(&config.tls.certificate).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        let key = PrivateKeyDer::from_pem_file(&config.tls.key).unwrap();
+        let mut c: tokio_rustls::rustls::ServerConfig = tokio_rustls::rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .unwrap();
+        c.alpn_protocols = config.tls.alpn.iter().map(|p| p.as_bytes().to_vec()).collect();
+        let acceptor = TlsAcceptor::from(Arc::new(c));
+        
+        loop {
+            loop {
+                match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
+                    Ok(tc) => {
+                        tokio::spawn(async move {
+                            if let Err(e) = tls_handler(tc, config).await {
+                                if log(){
+                                    println!("DoH server<TLS>: {e}")
+                                }
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        if log() {
+                            println!("DoH server<TLS>: {e}")
+                        }
                     }
                 }
-            });
+            }
+        }
+    } else {
+        // no tls
+        loop {
+            if let Ok((stream, _)) = tcp.accept().await {
+                tokio::spawn(async move {
+                    if let Ok(peer_addr) = stream.peer_addr() {
+                        if let Err(e) = stream_handler(stream, config, peer_addr).await {
+                            if log() {
+                                println!("{e}");
+                            }
+                        }
+                    }
+                });
+            }
         }
     }
 }
 
-async fn stream_handler(
-    mut stream: tokio::net::TcpStream,
+async fn tls_handler(tc: tls::Tc, config: &'static config::Config)-> tokio::io::Result<()> {
+    let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
+    let stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream> = tc.accept().await?;
+
+    stream_handler(
+        stream,
+        config,
+        peer_addr
+    ).await
+}
+
+async fn stream_handler <S>(
+    mut stream: S,
     config: &'static config::Config,
-) -> tokio::io::Result<()> {
+    peer_addr: SocketAddr
+) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send + 'static {
     let mut buff: Vec<u8> = vec![0; 1024 * 8];
     let mut size = stream.read(&mut buff).await?;
 
@@ -83,7 +133,6 @@ async fn stream_handler(
         return Err(verror::VError::AuthenticationFailed.into());
     }
 
-    let user_addr = stream.peer_addr()?;
     if let Err(e) = match vless.rt {
         vless::SocketType::TCP => handle_tcp(vless, buff, size, stream, config).await,
         vless::SocketType::UDP => {
@@ -93,22 +142,22 @@ async fn stream_handler(
         vless::SocketType::MUX => mux::xudp(stream, buff[..size].to_vec()).await,
     } {
         if log() {
-            println!("{user_addr}: {e}")
+            println!("{peer_addr}: {e}")
         }
     } else if log() {
-        println!("{user_addr}: closed connection")
+        println!("{peer_addr}: closed connection")
     }
 
     Ok(())
 }
 
-async fn handle_tcp(
+async fn handle_tcp <S>(
     vless: vless::Vless,
     buff: Vec<u8>,
     size: usize,
-    mut stream: tokio::net::TcpStream,
+    stream: S,
     config: &'static config::Config,
-) -> tokio::io::Result<()> {
+) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send + 'static {
     let (target, body) = vless.target.as_ref().unwrap();
     let mut target = tokio::net::TcpStream::connect(target).await?;
 
@@ -116,7 +165,7 @@ async fn handle_tcp(
     target.flush().await?;
     drop(buff);
 
-    let (mut client_read, mut client_write) = stream.split();
+    let (mut client_read, mut client_write) = tokio::io::split(stream);
     let (mut target_read, target_write) = target.split();
 
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
@@ -144,7 +193,7 @@ async fn handle_tcp(
     let _ = client_write.write(&[0, 0]).await?;
 
     // A timeout controller listens for both upload and download activities. If there is no upload or download activity for a specified duration, the connection will be closed.
-    let mut tcpwriter_client = tcp::TcpWriter {
+    let mut tcpwriter_client = tcp::TcpWriterGeneric {
         hr: client_write,
         signal: ch_snd.clone(),
     };
@@ -163,12 +212,12 @@ async fn handle_tcp(
     Ok(())
 }
 
-async fn handle_udp(
+async fn handle_udp <S> (
     vless: vless::Vless,
     buff: Vec<u8>,
     size: usize,
-    mut stream: tokio::net::TcpStream,
-) -> tokio::io::Result<()> {
+    stream: S,
+) -> tokio::io::Result<()> where S: AsyncRead + AsyncWrite + Unpin + Send + 'static {
     let (target, body) = vless.target.as_ref().unwrap();
     let addrtype = {
         if target.is_ipv4() {
@@ -211,7 +260,7 @@ async fn handle_udp(
     };
 
     // proxy UDP
-    let (client_read, client_write) = stream.split();
+    let (client_read, client_write) = tokio::io::split(stream);
     tokio::try_join!(
         timeout_handler,
         udputils::copy_t2u(&udp, client_read, ch_snd.clone()),

@@ -9,5 +9,11 @@
             "uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
         }
     ],
-    "transporter": "TCP"
+    "transporter": "TCP",
+    "tls": {
+        "enable": false,
+        "alpn": ["h2", "http/1.1"],
+        "certificate": "cert.pem",
+        "key": "key.pem"
+    }
 }
