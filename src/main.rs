@@ -181,9 +181,9 @@ where
     drop(buff);
 
     let (mut client_read, mut client_write) = tokio::io::split(stream);
-    let (mut target_read, target_write) = target.split();
+    let (mut target_read, target_write) = tokio::io::split(target);
 
-    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
+    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
 
     let timeout_handler = async move {
         loop {
@@ -213,7 +213,7 @@ where
         signal: ch_snd.clone(),
     };
 
-    let mut tcpwriter_target = tcp::TcpWriter {
+    let mut tcpwriter_target = tcp::TcpWriterGeneric {
         hr: target_write,
         signal: ch_snd,
     };
@@ -256,7 +256,7 @@ where
     }
     drop(buff);
 
-    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
+    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
 
     let timeout_handler = async move {
         loop {

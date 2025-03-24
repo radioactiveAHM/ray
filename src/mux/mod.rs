@@ -81,7 +81,7 @@ where
 {
     let (mut client_read, client_write) = tokio::io::split(stream);
 
-    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(1);
+    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
 
     let timeout_handler = async move {
         loop {
