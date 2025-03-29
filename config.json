@@ -1,8 +1,8 @@
 {
-    "log": true,
-    "tcp_idle_timeout": 30,
-    "udp_idle_timeout": 15,
-    "listen": "0.0.0.0:80",
+    "log": false,
+    "tcp_idle_timeout": 300,
+    "udp_idle_timeout": 90,
+    "listen": "[::]:80",
     "users": [
         {
             "name": "admin",
