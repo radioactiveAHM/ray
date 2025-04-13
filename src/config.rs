@@ -32,6 +32,18 @@ pub struct User {
     pub uuid: String,
 }
 
+#[derive(serde::Deserialize, Clone, Copy)]
+pub enum ResolvingMode {
+    IPv4, // Prefer IPv4 over IPv6
+    IPv6, // Prefer IPv6 over IPv4
+}
+
+#[derive(serde::Deserialize, Clone, Copy)]
+pub struct Resolver {
+    pub addr: SocketAddr,
+    pub mode: ResolvingMode,
+}
+
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub log: bool,
@@ -41,6 +53,7 @@ pub struct Config {
     pub users: Vec<User>,
     pub transporter: Transporter,
     pub tls: Tls,
+    pub resolver: Resolver,
 }
 
 pub fn load_config() -> Config {

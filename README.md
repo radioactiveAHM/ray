@@ -33,6 +33,10 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
         "alpn": ["h2", "http/1.1"],
         "certificate": "cert.pem", // Certificate Path
         "key": "key.pem" // Key Path
+    },
+    "resolver": { // Built in domain resolver (only udp supported)
+        "addr": "1.1.1.1:53",
+        "mode": "IPv4" // Variants include `IPv4`, which prioritizes IPv4 over IPv6, and `IPv6`, which prioritizes IPv6 over IPv4
     }
 }
 ```

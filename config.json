@@ -1,5 +1,5 @@
 {
-    "log": false,
+    "log": true,
     "tcp_idle_timeout": 300,
     "udp_idle_timeout": 90,
     "listen": "[::]:80",
@@ -15,5 +15,9 @@
         "alpn": ["h2", "http/1.1"],
         "certificate": "cert.pem",
         "key": "key.pem"
+    },
+    "resolver": {
+        "addr": "1.1.1.1:53",
+        "mode": "IPv6"
     }
 }

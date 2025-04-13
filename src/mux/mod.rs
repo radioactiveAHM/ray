@@ -25,29 +25,17 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usiz
         )),
         2 => {
             if let Ok(s) = core::str::from_utf8(&buff[11..buff[10] as usize + 11]) {
-                let resolve = tokio::net::lookup_host(format!("{s}:{port}")).await;
-                if resolve.is_err() {
-                    if crate::log() {
-                        println!("ResolveDnsFailed for {}", s);
-                    }
-                    return Err(VError::ResolveDnsFailed);
+                match crate::resolver::resolve(s, port).await {
+                    Ok(ip) => Ok((
+                        ip,
+                        convert_two_u8s_to_u16_be([
+                            buff[11 + buff[10] as usize],
+                            buff[12 + buff[10] as usize],
+                        ]) as usize,
+                        buff[10] as usize + 13,
+                    )),
+                    Err(e) => Err(e),
                 }
-                let ip = resolve.unwrap().collect::<Vec<SocketAddr>>();
-                if ip.is_empty() {
-                    if crate::log() {
-                        println!("NoHost for {}", s);
-                    }
-                    return Err(VError::NoHost);
-                }
-
-                Ok((
-                    ip[0],
-                    convert_two_u8s_to_u16_be([
-                        buff[11 + buff[10] as usize],
-                        buff[12 + buff[10] as usize],
-                    ]) as usize,
-                    buff[10] as usize + 13,
-                ))
             } else {
                 Err(VError::UTF8Err)
             }

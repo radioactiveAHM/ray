@@ -15,6 +15,7 @@ use tokio_rustls::{
 mod auth;
 mod config;
 mod mux;
+mod resolver;
 mod tcp;
 mod tls;
 mod transporters;
@@ -25,6 +26,10 @@ mod vless;
 
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
+static mut RESOLVER: config::Resolver = config::Resolver {
+    addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(1, 1, 1, 1), 53)),
+    mode: config::ResolvingMode::IPv4,
+};
 
 fn log() -> bool {
     unsafe { LOG }
@@ -32,6 +37,10 @@ fn log() -> bool {
 
 fn uit() -> u64 {
     unsafe { UIT }
+}
+
+fn resolver_config() -> config::Resolver {
+    unsafe { RESOLVER }
 }
 
 #[tokio::main]
@@ -43,6 +52,7 @@ async fn main() {
     unsafe {
         LOG = config.log;
         UIT = config.udp_idle_timeout;
+        RESOLVER = config.resolver;
     }
 
     let tcp = tokio::net::TcpListener::bind(config.listen).await.unwrap();
