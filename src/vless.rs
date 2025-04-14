@@ -22,7 +22,15 @@ fn parse_socket(s: u8) -> Result<SocketType, VError> {
         Err(VError::UnknownSocket)
     }
 }
-async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize), VError> {
+async fn parse_target(
+    buff: &[u8],
+    port: u16,
+    resolver: &'static hickory_resolver::Resolver<
+        hickory_resolver::name_server::GenericConnector<
+            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+        >,
+    >,
+) -> Result<(SocketAddr, usize), VError> {
     match buff[21] {
         1 => Ok((
             SocketAddr::V4(SocketAddrV4::new(
@@ -33,7 +41,7 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize), VEr
         )),
         2 => {
             if let Ok(s) = core::str::from_utf8(&buff[23..buff[22] as usize + 23]) {
-                match crate::resolver::resolve(s, port).await {
+                match crate::resolver::resolve(resolver, s, port).await {
                     Ok(ip) => Ok((ip, 23 + buff[22] as usize)),
                     Err(e) => Err(e),
                 }
@@ -78,7 +86,14 @@ pub struct Vless {
 }
 
 impl Vless {
-    pub async fn new(buff: &[u8]) -> Result<Self, VError> {
+    pub async fn new(
+        buff: &[u8],
+        resolver: &'static hickory_resolver::Resolver<
+            hickory_resolver::name_server::GenericConnector<
+                hickory_resolver::proto::runtime::TokioRuntimeProvider,
+            >,
+        >,
+    ) -> Result<Self, VError> {
         if buff.is_empty() {
             return Err(VError::Unknown);
         }
@@ -106,7 +121,7 @@ impl Vless {
         let mut v = Self {
             uuid: [0; 16],
             rt: parse_socket(buff[18])?,
-            target: Some(parse_target(buff, port).await?),
+            target: Some(parse_target(buff, port, resolver).await?),
         };
 
         v.uuid.copy_from_slice(&buff[1..17]);

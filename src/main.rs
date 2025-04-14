@@ -12,6 +12,10 @@ use tokio_rustls::{
     rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
 
+use hickory_resolver::{
+    Resolver, config::NameServerConfigGroup, name_server::TokioConnectionProvider,
+};
+
 mod auth;
 mod config;
 mod mux;
@@ -26,10 +30,7 @@ mod vless;
 
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
-static mut RESOLVER: config::Resolver = config::Resolver {
-    addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(1, 1, 1, 1), 53)),
-    mode: config::ResolvingMode::IPv4,
-};
+static mut RESOLVER_MODE: config::ResolvingMode = config::ResolvingMode::IPv4;
 
 fn log() -> bool {
     unsafe { LOG }
@@ -39,8 +40,8 @@ fn uit() -> u64 {
     unsafe { UIT }
 }
 
-fn resolver_config() -> config::Resolver {
-    unsafe { RESOLVER }
+fn resolver_mode() -> config::ResolvingMode {
+    unsafe { RESOLVER_MODE }
 }
 
 #[tokio::main]
@@ -49,10 +50,30 @@ async fn main() {
     let c = config::load_config();
     let config: &'static config::Config = utils::unsafe_staticref(&c);
 
+    let resolver = Resolver::builder_with_config(
+        hickory_resolver::config::ResolverConfig::from_parts(
+            None,
+            Vec::new(),
+            NameServerConfigGroup::from_ips_clear(
+                &[config.resolver.addr.ip()],
+                config.resolver.addr.port(),
+                true,
+            ),
+        ),
+        TokioConnectionProvider::default(),
+    )
+    .build();
+
+    let cresolver: &'static Resolver<
+        hickory_resolver::name_server::GenericConnector<
+            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+        >,
+    > = utils::unsafe_staticref(&resolver);
+
     unsafe {
         LOG = config.log;
         UIT = config.udp_idle_timeout;
-        RESOLVER = config.resolver;
+        RESOLVER_MODE = config.resolver.mode;
     }
 
     let tcp = tokio::net::TcpListener::bind(config.listen).await.unwrap();
@@ -81,7 +102,7 @@ async fn main() {
             match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
                 Ok(tc) => {
                     tokio::spawn(async move {
-                        if let Err(e) = tls_handler(tc, config).await {
+                        if let Err(e) = tls_handler(tc, config, cresolver).await {
                             if log() {
                                 println!("DoH server<TLS>: {e}")
                             }
@@ -101,7 +122,7 @@ async fn main() {
             if let Ok((stream, _)) = tcp.accept().await {
                 tokio::spawn(async move {
                     if let Ok(peer_addr) = stream.peer_addr() {
-                        if let Err(e) = stream_handler(stream, config, peer_addr).await {
+                        if let Err(e) = stream_handler(stream, config, peer_addr, cresolver).await {
                             if log() {
                                 println!("{e}");
                             }
@@ -113,17 +134,30 @@ async fn main() {
     }
 }
 
-async fn tls_handler(tc: tls::Tc, config: &'static config::Config) -> tokio::io::Result<()> {
+async fn tls_handler(
+    tc: tls::Tc,
+    config: &'static config::Config,
+    resolver: &'static Resolver<
+        hickory_resolver::name_server::GenericConnector<
+            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+        >,
+    >,
+) -> tokio::io::Result<()> {
     let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
     let stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream> = tc.accept().await?;
 
-    stream_handler(stream, config, peer_addr).await
+    stream_handler(stream, config, peer_addr, resolver).await
 }
 
 async fn stream_handler<S>(
     mut stream: S,
     config: &'static config::Config,
     peer_addr: SocketAddr,
+    resolver: &'static Resolver<
+        hickory_resolver::name_server::GenericConnector<
+            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+        >,
+    >,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -150,7 +184,7 @@ where
         }
     }
 
-    let mut vless = vless::Vless::new(&buff[..size]).await?;
+    let mut vless = vless::Vless::new(&buff[..size], resolver).await?;
     if auth::authenticate(config, &vless) {
         return Err(verror::VError::AuthenticationFailed.into());
     }
@@ -161,7 +195,7 @@ where
             vless.target.as_mut().unwrap().1 += 2;
             handle_udp(vless, buff, size, stream).await
         }
-        vless::SocketType::MUX => mux::xudp(stream, buff[..size].to_vec()).await,
+        vless::SocketType::MUX => mux::xudp(stream, buff[..size].to_vec(), resolver).await,
     } {
         if log() {
             println!("{peer_addr}: {e}")

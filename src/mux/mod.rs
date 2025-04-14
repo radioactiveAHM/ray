@@ -13,7 +13,15 @@ use crate::{
     verror::VError,
 };
 
-async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usize), VError> {
+async fn parse_target(
+    buff: &[u8],
+    port: u16,
+    resolver: &'static hickory_resolver::Resolver<
+        hickory_resolver::name_server::GenericConnector<
+            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+        >,
+    >,
+) -> Result<(SocketAddr, usize, usize), VError> {
     match buff[9] {
         1 => Ok((
             SocketAddr::V4(SocketAddrV4::new(
@@ -25,7 +33,7 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usiz
         )),
         2 => {
             if let Ok(s) = core::str::from_utf8(&buff[11..buff[10] as usize + 11]) {
-                match crate::resolver::resolve(s, port).await {
+                match crate::resolver::resolve(resolver, s, port).await {
                     Ok(ip) => Ok((
                         ip,
                         convert_two_u8s_to_u16_be([
@@ -63,7 +71,15 @@ async fn parse_target(buff: &[u8], port: u16) -> Result<(SocketAddr, usize, usiz
     }
 }
 
-pub async fn xudp<S>(stream: S, mut buffer: Vec<u8>) -> tokio::io::Result<()>
+pub async fn xudp<S>(
+    stream: S,
+    mut buffer: Vec<u8>,
+    resolver: &'static hickory_resolver::Resolver<
+        hickory_resolver::name_server::GenericConnector<
+            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+        >,
+    >,
+) -> tokio::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -102,7 +118,7 @@ where
             let mut mux_id = [0; 6];
             mux_id.copy_from_slice(&buff[1..7]);
             let port = convert_two_u8s_to_u16_be([buff[7], buff[8]]);
-            let target = parse_target(&buff[..size], port).await?;
+            let target = parse_target(&buff[..size], port, resolver).await?;
 
             let addrtype = {
                 if target.0.is_ipv4() {
@@ -137,7 +153,7 @@ where
             let mut mux_id = [0; 6];
             mux_id.copy_from_slice(&buffer[1..7]);
             let port = convert_two_u8s_to_u16_be([buffer[7], buffer[8]]);
-            let target = parse_target(&buffer, port).await?;
+            let target = parse_target(&buffer, port, resolver).await?;
 
             let addrtype = {
                 if target.0.is_ipv4() {
