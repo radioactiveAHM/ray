@@ -12,10 +12,6 @@ use tokio_rustls::{
     rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
 
-use hickory_resolver::{
-    Resolver, config::NameServerConfigGroup, name_server::TokioConnectionProvider,
-};
-
 mod auth;
 mod config;
 mod mux;
@@ -50,21 +46,12 @@ async fn main() {
     let c = config::load_config();
     let config: &'static config::Config = utils::unsafe_staticref(&c);
 
-    let resolver = Resolver::builder_with_config(
-        hickory_resolver::config::ResolverConfig::from_parts(
-            None,
-            Vec::new(),
-            NameServerConfigGroup::from_ips_clear(
-                &[config.resolver.addr.ip()],
-                config.resolver.addr.port(),
-                true,
-            ),
-        ),
-        TokioConnectionProvider::default(),
-    )
-    .build();
-
-    let cresolver: &'static Resolver<
+    let resolver: hickory_resolver::Resolver<
+        hickory_resolver::name_server::GenericConnector<
+            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+        >,
+    > = resolver::generate_resolver(&config.resolver);
+    let cresolver: &'static hickory_resolver::Resolver<
         hickory_resolver::name_server::GenericConnector<
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
@@ -137,7 +124,7 @@ async fn main() {
 async fn tls_handler(
     tc: tls::Tc,
     config: &'static config::Config,
-    resolver: &'static Resolver<
+    resolver: &'static hickory_resolver::Resolver<
         hickory_resolver::name_server::GenericConnector<
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
@@ -153,7 +140,7 @@ async fn stream_handler<S>(
     mut stream: S,
     config: &'static config::Config,
     peer_addr: SocketAddr,
-    resolver: &'static Resolver<
+    resolver: &'static hickory_resolver::Resolver<
         hickory_resolver::name_server::GenericConnector<
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,

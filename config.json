@@ -17,7 +17,8 @@
         "key": "key.pem"
     },
     "resolver": {
-        "addr": "1.1.1.1:53",
+        "address": null,
+        "ip_port": "1.1.1.1:53",
         "mode": "IPv4"
     }
 }

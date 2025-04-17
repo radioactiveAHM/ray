@@ -38,9 +38,10 @@ pub enum ResolvingMode {
     IPv6, // Prefer IPv6 over IPv4
 }
 
-#[derive(serde::Deserialize, Clone, Copy)]
+#[derive(serde::Deserialize, Clone)]
 pub struct Resolver {
-    pub addr: SocketAddr,
+    pub address: Option<String>,
+    pub ip_port: SocketAddr,
     pub mode: ResolvingMode,
 }
 

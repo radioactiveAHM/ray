@@ -34,9 +34,10 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
         "certificate": "cert.pem", // Certificate Path
         "key": "key.pem" // Key Path
     },
-    "resolver": { // Built in domain resolver (only udp supported)
-        "addr": "1.1.1.1:53",
-        "mode": "IPv4" // Variants include `IPv4`, which prioritizes IPv4 over IPv6, and `IPv6`, which prioritizes IPv6 over IPv4
+    "resolver": { // Built-in domain resolver supporting multiple protocols: udp, https, h3, tls, and quic
+        "address": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google"
+        "addr": "1.1.1.1:53", // Standard port: UDP (53), HTTPS (443), TLS/QUIC (853)
+        "mode": "IPv4" // Options: 'IPv4' prioritizes IPv4 over IPv6; 'IPv6' prioritizes IPv6 over IPv4
     }
 }
 ```
