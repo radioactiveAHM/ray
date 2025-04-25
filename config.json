@@ -20,5 +20,12 @@
         "address": null,
         "ip_port": "1.1.1.1:53",
         "mode": "IPv4"
+    },
+    "tcp_socket_options": {
+        "send_buffer_size": null,
+        "recv_buffer_size": null,
+        "nodelay": false,
+        "keepalive": true,
+        "listen_backlog": 4096
     }
 }

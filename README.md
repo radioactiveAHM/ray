@@ -38,6 +38,13 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
         "address": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google"
         "ip_port": "1.1.1.1:53", // Standard port: UDP (53), HTTPS (443), TLS/QUIC (853)
         "mode": "IPv4" // Options: 'IPv4' prioritizes IPv4 over IPv6; 'IPv6' prioritizes IPv6 over IPv4
+    },
+    "tcp_socket_options": {
+        "send_buffer_size": null, // The size of the socket send buffer, if set; null means default system size
+        "recv_buffer_size": null, // The size of the socket receive buffer, if set; null means default system size
+        "nodelay": false, // Whether to disable Nagle’s algorithm; false means packets may be buffered for efficiency
+        "keepalive": true, // Whether to enable keepalive packets to maintain connection activity
+        "listen_backlog": 4096 // Maximum number of queued connections waiting to be accepted
     }
 }
 ```

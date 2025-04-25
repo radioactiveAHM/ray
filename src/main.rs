@@ -27,6 +27,13 @@ mod vless;
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
 static mut RESOLVER_MODE: config::ResolvingMode = config::ResolvingMode::IPv4;
+static mut TSO: config::TcpSocketOptions = config::TcpSocketOptions {
+    send_buffer_size: None,
+    recv_buffer_size: None,
+    nodelay: false,
+    keepalive: true,
+    listen_backlog: 4096,
+};
 
 fn log() -> bool {
     unsafe { LOG }
@@ -38,6 +45,10 @@ fn uit() -> u64 {
 
 fn resolver_mode() -> config::ResolvingMode {
     unsafe { RESOLVER_MODE }
+}
+
+fn tso() -> config::TcpSocketOptions {
+    unsafe { TSO }
 }
 
 #[tokio::main]
@@ -61,9 +72,13 @@ async fn main() {
         LOG = config.log;
         UIT = config.udp_idle_timeout;
         RESOLVER_MODE = config.resolver.mode;
+        TSO = config.tcp_socket_options
     }
 
-    let tcp = tokio::net::TcpListener::bind(config.listen).await.unwrap();
+    let tcp = tcp::tcpsocket(config.listen)
+        .unwrap()
+        .listen(config.tcp_socket_options.listen_backlog)
+        .unwrap();
 
     if config.tls.enable {
         // with tls
@@ -205,7 +220,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let (target, body) = vless.target.as_ref().unwrap();
-    let mut target = tokio::net::TcpStream::connect(target).await?;
+    let mut target = tcp::stream(*target).await?;
 
     let _ = target.write(&buff[*body..size]).await?;
     target.flush().await?;

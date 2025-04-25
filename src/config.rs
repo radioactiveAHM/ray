@@ -1,5 +1,14 @@
 use std::net::SocketAddr;
 
+#[derive(serde::Deserialize, Clone, Copy)]
+pub struct TcpSocketOptions {
+    pub send_buffer_size: Option<u32>,
+    pub recv_buffer_size: Option<u32>,
+    pub nodelay: bool,
+    pub keepalive: bool,
+    pub listen_backlog: u32,
+}
+
 #[derive(serde::Deserialize)]
 pub struct Tls {
     pub enable: bool,
@@ -55,6 +64,7 @@ pub struct Config {
     pub transporter: Transporter,
     pub tls: Tls,
     pub resolver: Resolver,
+    pub tcp_socket_options: TcpSocketOptions,
 }
 
 pub fn load_config() -> Config {
