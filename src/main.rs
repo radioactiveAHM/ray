@@ -53,20 +53,15 @@ fn tso() -> config::TcpSocketOptions {
 
 #[tokio::main]
 async fn main() {
+    tokio_rustls::rustls::crypto::ring::default_provider()
+        .install_default()
+        .unwrap();
     // Load config and convert to &'static
     let c = config::load_config();
     let config: &'static config::Config = utils::unsafe_staticref(&c);
 
-    let resolver: hickory_resolver::Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
-        >,
-    > = resolver::generate_resolver(&config.resolver);
-    let cresolver: &'static hickory_resolver::Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
-        >,
-    > = utils::unsafe_staticref(&resolver);
+    let resolver = resolver::generate_resolver(&config.resolver);
+    let cresolver = utils::unsafe_staticref(&resolver);
 
     unsafe {
         LOG = config.log;
