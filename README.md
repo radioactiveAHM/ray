@@ -63,7 +63,7 @@ HTTP
     "transporter": {
         "HTTP": {
             "path": "/",
-            "host": "meow.com",
+            "host": "meow.com", // If set null any host will be accepted
             "method": "GET"
         }
     }
@@ -75,7 +75,7 @@ HttpUpgrade
     "transporter": {
         "HttpUpgrade": {
             "path": "/",
-            "host": "meow.com",
+            "host": "meow.com", // If set null any host will be accepted
             "method": "GET"
         }
     }

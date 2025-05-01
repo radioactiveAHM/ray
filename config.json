@@ -26,6 +26,6 @@
         "recv_buffer_size": null,
         "nodelay": false,
         "keepalive": true,
-        "listen_backlog": 4096
+        "listen_backlog": 128
     }
 }

@@ -9,7 +9,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "io-uti
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["ring"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-hickory-resolver = { version = "0.25.1", features = ["https-ring", "h3-ring", "quic-ring", "tls-ring", "webpki-roots"] }
+hickory-resolver = { version = "0.25", features = ["https-ring", "h3-ring", "quic-ring", "tls-ring", "webpki-roots"] }
 
 [profile.release]
 panic = "abort"
