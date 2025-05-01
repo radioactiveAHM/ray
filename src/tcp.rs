@@ -34,43 +34,55 @@ where
     }
 }
 
-pub fn tcpsocket(a: SocketAddr) -> tokio::io::Result<TcpSocket> {
+pub fn tcpsocket(a: SocketAddr, minimize: bool) -> tokio::io::Result<TcpSocket> {
     let socket = if a.is_ipv4() {
         tokio::net::TcpSocket::new_v4()?
     } else {
         tokio::net::TcpSocket::new_v6()?
     };
 
+    if minimize {
+        // useful if socket is used for dns.
+        if socket.set_send_buffer_size(1024 * 4).is_ok() {
+            let _ = socket.set_recv_buffer_size(1024 * 4);
+        } else if socket.set_send_buffer_size(1024 * 8).is_ok() {
+            let _ = socket.set_recv_buffer_size(1024 * 8);
+        } else if socket.set_send_buffer_size(1024 * 16).is_ok() {
+            let _ = socket.set_recv_buffer_size(1024 * 16);
+        }
+
+        let _ = socket.set_nodelay(true);
+        let _ = socket.set_keepalive(true);
+    } else {
+        let options = crate::tso();
+        if let Some(sbs) = options.send_buffer_size {
+            socket.set_send_buffer_size(sbs)?;
+        }
+        if let Some(rbs) = options.recv_buffer_size {
+            socket.set_recv_buffer_size(rbs)?;
+        }
+        socket.set_nodelay(options.nodelay)?;
+        socket.set_keepalive(options.keepalive)?;
+    }
+
     socket.bind(a)?;
-
-    let options = crate::tso();
-
-    if let Some(sbs) = options.send_buffer_size {
-        socket.set_send_buffer_size(sbs)?;
-    }
-    if let Some(rbs) = options.recv_buffer_size {
-        socket.set_recv_buffer_size(rbs)?;
-    }
-    socket.set_nodelay(options.nodelay)?;
-    socket.set_keepalive(options.keepalive)?;
 
     Ok(socket)
 }
 
 pub async fn stream(a: SocketAddr) -> tokio::io::Result<TcpStream> {
     if a.is_ipv4() {
-        Ok(
-            tcpsocket(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?
-                .connect(a)
-                .await?,
-        )
+        Ok(tcpsocket(
+            SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)),
+            a.port() == 53 || a.port() == 853,
+        )?
+        .connect(a)
+        .await?)
     } else {
-        Ok(tcpsocket(SocketAddr::V6(SocketAddrV6::new(
-            Ipv6Addr::UNSPECIFIED,
-            0,
-            0,
-            0,
-        )))?
+        Ok(tcpsocket(
+            SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0)),
+            a.port() == 53 || a.port() == 853,
+        )?
         .connect(a)
         .await?)
     }

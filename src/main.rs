@@ -70,7 +70,7 @@ async fn main() {
         TSO = config.tcp_socket_options
     }
 
-    let tcp = tcp::tcpsocket(config.listen)
+    let tcp = tcp::tcpsocket(config.listen, false)
         .unwrap()
         .listen(config.tcp_socket_options.listen_backlog)
         .unwrap();
