@@ -208,7 +208,7 @@ async fn handle_tcp<S>(
     vless: vless::Vless,
     buff: Vec<u8>,
     size: usize,
-    stream: S,
+    mut stream: S,
     config: &'static config::Config,
 ) -> tokio::io::Result<()>
 where
@@ -221,11 +221,8 @@ where
     target.flush().await?;
     drop(buff);
 
-    let (mut client_read, mut client_write) = tokio::io::split(stream);
-    let (mut target_read, target_write) = tokio::io::split(target);
-
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
-
+    // A timeout controller listens for both upload and download activities. If there is no upload or download activity for a specified duration, the connection will be closed.
     let timeout_handler = async move {
         loop {
             match timeout(
@@ -246,24 +243,45 @@ where
         ))
     };
 
-    let _ = client_write.write(&[0, 0]).await?;
+    if let Some(tpbs) = config.tcp_proxy_buffer_size {
+        let _ = stream.write(&[0, 0]).await?;
 
-    // A timeout controller listens for both upload and download activities. If there is no upload or download activity for a specified duration, the connection will be closed.
-    let mut tcpwriter_client = tcp::TcpWriterGeneric {
-        hr: client_write,
-        signal: ch_snd.clone(),
-    };
+        let mut client_bi = tcp::TcpBiGeneric {
+            io: stream,
+            signal: ch_snd.clone(),
+        };
 
-    let mut tcpwriter_target = tcp::TcpWriterGeneric {
-        hr: target_write,
-        signal: ch_snd,
-    };
+        let mut target_bi = tcp::TcpBiGeneric {
+            io: target,
+            signal: ch_snd,
+        };
 
-    tokio::try_join!(
-        timeout_handler,
-        tokio::io::copy(&mut client_read, &mut tcpwriter_target),
-        tokio::io::copy(&mut target_read, &mut tcpwriter_client),
-    )?;
+        tokio::try_join!(
+            timeout_handler,
+            tokio::io::copy_bidirectional_with_sizes(&mut client_bi, &mut target_bi, tpbs, tpbs)
+        )?;
+    } else {
+        let (mut client_read, mut client_write) = tokio::io::split(stream);
+        let (mut target_read, target_write) = tokio::io::split(target);
+
+        let _ = client_write.write(&[0, 0]).await?;
+
+        let mut tcpwriter_client = tcp::TcpWriterGeneric {
+            hr: client_write,
+            signal: ch_snd.clone(),
+        };
+
+        let mut tcpwriter_target = tcp::TcpWriterGeneric {
+            hr: target_write,
+            signal: ch_snd,
+        };
+
+        tokio::try_join!(
+            timeout_handler,
+            tokio::io::copy(&mut client_read, &mut tcpwriter_target),
+            tokio::io::copy(&mut target_read, &mut tcpwriter_client),
+        )?;
+    }
 
     Ok(())
 }

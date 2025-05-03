@@ -18,6 +18,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 ```json
 {
     "log": false, // Enable logging. Disable for maximum performance
+    "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB and utilizes tokio::io::copy for proxying. If a specific value is provided, tokio::io::copy_bidirectional_with_sizes is used instead
     "tcp_idle_timeout": 300, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
     "udp_idle_timeout": 90, // UDP idle timeout in seconds
     "listen": "[::]:80", // Server listening address and port. [::] works for both ipv4 and ipv6 in linux.

@@ -57,6 +57,7 @@ pub struct Resolver {
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub log: bool,
+    pub tcp_proxy_buffer_size: Option<usize>,
     pub tcp_idle_timeout: u64,
     pub udp_idle_timeout: u64,
     pub listen: SocketAddr,
