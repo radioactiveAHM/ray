@@ -1,6 +1,5 @@
 use std::{
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
-    sync::Arc,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6}, pin::Pin, sync::Arc
 };
 
 use tokio::{
@@ -247,12 +246,12 @@ where
         let _ = stream.write(&[0, 0]).await?;
 
         let mut client_bi = tcp::TcpBiGeneric {
-            io: stream,
+            io: Pin::new(&mut stream),
             signal: ch_snd.clone(),
         };
 
         let mut target_bi = tcp::TcpBiGeneric {
-            io: target,
+            io: Pin::new(&mut target),
             signal: ch_snd,
         };
 
@@ -262,17 +261,17 @@ where
         )?;
     } else {
         let (mut client_read, mut client_write) = tokio::io::split(stream);
-        let (mut target_read, target_write) = tokio::io::split(target);
+        let (mut target_read, mut target_write) = tokio::io::split(target);
 
         let _ = client_write.write(&[0, 0]).await?;
 
         let mut tcpwriter_client = tcp::TcpWriterGeneric {
-            hr: client_write,
+            hr: Pin::new(&mut client_write),
             signal: ch_snd.clone(),
         };
 
         let mut tcpwriter_target = tcp::TcpWriterGeneric {
-            hr: target_write,
+            hr: Pin::new(&mut target_write),
             signal: ch_snd,
         };
 

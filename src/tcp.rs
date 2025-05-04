@@ -1,12 +1,12 @@
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::{net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6}, pin::Pin};
 
 use tokio::net::{TcpSocket, TcpStream};
 
-pub struct TcpWriterGeneric<W> {
-    pub hr: tokio::io::WriteHalf<W>,
+pub struct TcpWriterGeneric<'a, W> {
+    pub hr: Pin<&'a mut W>,
     pub signal: tokio::sync::mpsc::Sender<()>,
 }
-impl<W> tokio::io::AsyncWrite for TcpWriterGeneric<W>
+impl<'a, W> tokio::io::AsyncWrite for TcpWriterGeneric<'a, W>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
@@ -16,29 +16,29 @@ where
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
         let _ = self.signal.try_send(());
-        std::pin::Pin::new(&mut self.hr).poll_write(cx, buf)
+        self.hr.as_mut().poll_write(cx, buf)
     }
 
     fn poll_flush(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        std::pin::Pin::new(&mut self.hr).poll_flush(cx)
+        self.hr.as_mut().poll_flush(cx)
     }
 
     fn poll_shutdown(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        std::pin::Pin::new(&mut self.hr).poll_shutdown(cx)
+        self.hr.as_mut().poll_shutdown(cx)
     }
 }
 
-pub struct TcpBiGeneric<W> {
-    pub io: W,
+pub struct TcpBiGeneric<'a, W> {
+    pub io: Pin<&'a mut W>,
     pub signal: tokio::sync::mpsc::Sender<()>,
 }
-impl<W> tokio::io::AsyncWrite for TcpBiGeneric<W>
+impl<'a, W> tokio::io::AsyncWrite for TcpBiGeneric<'a, W>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
@@ -48,25 +48,25 @@ where
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
         let _ = self.signal.try_send(());
-        std::pin::Pin::new(&mut self.io).poll_write(cx, buf)
+        self.io.as_mut().poll_write(cx, buf)
     }
 
     fn poll_flush(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        std::pin::Pin::new(&mut self.io).poll_flush(cx)
+        self.io.as_mut().poll_flush(cx)
     }
 
     fn poll_shutdown(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        std::pin::Pin::new(&mut self.io).poll_shutdown(cx)
+        self.io.as_mut().poll_shutdown(cx)
     }
 }
 
-impl<W> tokio::io::AsyncRead for TcpBiGeneric<W>
+impl<'a, W> tokio::io::AsyncRead for TcpBiGeneric<'a, W>
 where
     W: tokio::io::AsyncRead + Unpin + Send,
 {
@@ -76,7 +76,7 @@ where
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
         let _ = self.signal.try_send(());
-        std::pin::Pin::new(&mut self.io).poll_read(cx, buf)
+        self.io.as_mut().poll_read(cx, buf)
     }
 }
 
