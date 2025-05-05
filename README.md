@@ -15,10 +15,13 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 
 ## Configuration File `config.json`
 
+**Notes:** Increasing the buffer size for `tcp_proxy_buffer_size` and `udp_proxy_buffer_size` enhances throughput and reduces latency and cpu usage. However, be mindful of memory usage and the number of users if the system runs out of memory, the application will crash.
+
 ```json
 {
     "log": false, // Enable logging. Disable for maximum performance
-    "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB and utilizes tokio::io::copy for proxying. If a specific value is provided, tokio::io::copy_bidirectional_with_sizes is used instead
+    "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB and utilizes tokio::io::copy for proxying. If a specific value is provided, tokio::io::copy_bidirectional_with_sizes is used instead.
+    "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB.
     "tcp_idle_timeout": 300, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
     "udp_idle_timeout": 90, // UDP idle timeout in seconds
     "listen": "[::]:80", // Server listening address and port. [::] works for both ipv4 and ipv6 in linux.

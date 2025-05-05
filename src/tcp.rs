@@ -1,4 +1,7 @@
-use std::{net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6}, pin::Pin};
+use std::{
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    pin::Pin,
+};
 
 use tokio::net::{TcpSocket, TcpStream};
 
@@ -6,7 +9,7 @@ pub struct TcpWriterGeneric<'a, W> {
     pub hr: Pin<&'a mut W>,
     pub signal: tokio::sync::mpsc::Sender<()>,
 }
-impl<'a, W> tokio::io::AsyncWrite for TcpWriterGeneric<'a, W>
+impl<W> tokio::io::AsyncWrite for TcpWriterGeneric<'_, W>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
@@ -38,7 +41,7 @@ pub struct TcpBiGeneric<'a, W> {
     pub io: Pin<&'a mut W>,
     pub signal: tokio::sync::mpsc::Sender<()>,
 }
-impl<'a, W> tokio::io::AsyncWrite for TcpBiGeneric<'a, W>
+impl<W> tokio::io::AsyncWrite for TcpBiGeneric<'_, W>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
@@ -66,7 +69,7 @@ where
     }
 }
 
-impl<'a, W> tokio::io::AsyncRead for TcpBiGeneric<'a, W>
+impl<W> tokio::io::AsyncRead for TcpBiGeneric<'_, W>
 where
     W: tokio::io::AsyncRead + Unpin + Send,
 {

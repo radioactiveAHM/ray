@@ -124,13 +124,14 @@ pub async fn copy_t2u<R>(
     udp: &tokio::net::UdpSocket,
     mut r: tokio::io::ReadHalf<R>,
     ch_snd: tokio::sync::mpsc::Sender<()>,
+    buf_size: usize,
 ) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin + Send,
 {
     let mut uw = UdpWriter {
         udp,
-        b: Vec::with_capacity(1024 * 8),
+        b: Vec::with_capacity(buf_size),
         ch_snd,
     };
     tokio::io::copy(&mut r, &mut uw).await?;

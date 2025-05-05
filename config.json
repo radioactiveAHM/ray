@@ -1,6 +1,7 @@
 {
     "log": false,
     "tcp_proxy_buffer_size": null,
+    "udp_proxy_buffer_size": null,
     "tcp_idle_timeout": 300,
     "udp_idle_timeout": 90,
     "listen": "[::]:80",

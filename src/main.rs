@@ -1,5 +1,7 @@
 use std::{
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6}, pin::Pin, sync::Arc
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    pin::Pin,
+    sync::Arc,
 };
 
 use tokio::{
@@ -189,7 +191,7 @@ where
         vless::SocketType::TCP => handle_tcp(vless, buff, size, stream, config).await,
         vless::SocketType::UDP => {
             vless.target.as_mut().unwrap().1 += 2;
-            handle_udp(vless, buff, size, stream).await
+            handle_udp(vless, buff, size, stream, config).await
         }
         vless::SocketType::MUX => mux::xudp(stream, buff[..size].to_vec(), resolver).await,
     } {
@@ -213,8 +215,8 @@ async fn handle_tcp<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let (target, body) = vless.target.as_ref().unwrap();
-    let mut target = tcp::stream(*target).await?;
+    let (target_addr, body) = vless.target.as_ref().unwrap();
+    let mut target = tcp::stream(*target_addr).await?;
 
     let _ = target.write(&buff[*body..size]).await?;
     target.flush().await?;
@@ -255,10 +257,23 @@ where
             signal: ch_snd,
         };
 
-        tokio::try_join!(
-            timeout_handler,
-            tokio::io::copy_bidirectional_with_sizes(&mut client_bi, &mut target_bi, tpbs, tpbs)
-        )?;
+        if target_addr.port() == 53 || target_addr.port() == 853 {
+            // DNS does not require big buffer size
+            tokio::try_join!(
+                timeout_handler,
+                tokio::io::copy_bidirectional(&mut client_bi, &mut target_bi)
+            )?;
+        } else {
+            tokio::try_join!(
+                timeout_handler,
+                tokio::io::copy_bidirectional_with_sizes(
+                    &mut client_bi,
+                    &mut target_bi,
+                    tpbs,
+                    tpbs
+                )
+            )?;
+        }
     } else {
         let (mut client_read, mut client_write) = tokio::io::split(stream);
         let (mut target_read, mut target_write) = tokio::io::split(target);
@@ -290,6 +305,7 @@ async fn handle_udp<S>(
     buff: Vec<u8>,
     size: usize,
     stream: S,
+    config: &'static config::Config,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -335,11 +351,18 @@ where
         ))
     };
 
+    let buf_size = if target.port() == 53 || target.port() == 853 {
+        // DNS does not require big buffer size
+        1024 * 8
+    } else {
+        config.udp_proxy_buffer_size.unwrap_or(1024 * 8)
+    };
+
     // proxy UDP
     let (client_read, client_write) = tokio::io::split(stream);
     tokio::try_join!(
         timeout_handler,
-        udputils::copy_t2u(&udp, client_read, ch_snd.clone()),
+        udputils::copy_t2u(&udp, client_read, ch_snd.clone(), buf_size),
         udputils::copy_u2t(&udp, client_write, ch_snd)
     )?;
 
