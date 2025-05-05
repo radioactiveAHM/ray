@@ -183,7 +183,7 @@ where
     }
 
     let mut vless = vless::Vless::new(&buff[..size], resolver).await?;
-    if auth::authenticate(config, &vless) {
+    if auth::authenticate(config, &vless, peer_addr) {
         return Err(verror::VError::AuthenticationFailed.into());
     }
 

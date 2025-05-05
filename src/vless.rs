@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use crate::utils::convert_two_u8s_to_u16_be;
@@ -78,6 +79,16 @@ pub enum SocketType {
     UDP,
     MUX,
 }
+impl Display for SocketType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::TCP => write!(f, "TCP"),
+            Self::UDP => write!(f, "UDP"),
+            Self::MUX => write!(f, "XUDP"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Vless {
     pub uuid: [u8; 16],
