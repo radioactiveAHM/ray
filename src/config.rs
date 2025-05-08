@@ -54,9 +54,16 @@ pub struct Resolver {
     pub mode: ResolvingMode,
 }
 
+#[derive(serde::Deserialize, Clone, Copy)]
+pub enum TcpProxyMod {
+    Proxy,
+    Bi,
+}
+
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub log: bool,
+    pub tcp_proxy_mod: TcpProxyMod,
     pub tcp_proxy_buffer_size: Option<usize>,
     pub udp_proxy_buffer_size: Option<usize>,
     pub tcp_idle_timeout: u64,

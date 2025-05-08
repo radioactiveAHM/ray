@@ -79,6 +79,7 @@ pub async fn xudp<S>(
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
     >,
+    buf_size: usize,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -140,7 +141,7 @@ where
 
         tokio::try_join!(
             timeout_handler,
-            singbox::copy_t2u(&udp, client_read, &head, ch_snd.clone()),
+            singbox::copy_t2u(&udp, client_read, &head, ch_snd.clone(), buf_size),
             copy_u2t(&udp, client_write, &head, ch_snd)
         )?;
     } else if buffer.len() > 19 {
@@ -181,7 +182,7 @@ where
 
         tokio::try_join!(
             timeout_handler,
-            xray::copy_t2u(&udp, client_read, &head, buffer, ch_snd.clone()),
+            xray::copy_t2u(&udp, client_read, &head, buffer, ch_snd.clone(), buf_size),
             copy_u2t(&udp, client_write, &head, ch_snd)
         )?;
     }

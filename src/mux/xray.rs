@@ -93,15 +93,16 @@ impl AsyncWrite for UdpWriter<'_> {
 
 pub async fn copy_t2u<R>(
     udp: &tokio::net::UdpSocket,
-    mut r: tokio::io::ReadHalf<R>,
+    r: tokio::io::ReadHalf<R>,
     head: &[u8],
     b1: Vec<u8>,
     ch_snd: tokio::sync::mpsc::Sender<()>,
+    buf_size: usize,
 ) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin + Send,
 {
-    let mut b = Vec::with_capacity(1024 * 4);
+    let mut b = Vec::with_capacity(buf_size);
     b.extend_from_slice(&b1);
     drop(b1);
     let mut uw = UdpWriter {
@@ -110,7 +111,8 @@ where
         head,
         ch_snd,
     };
-    tokio::io::copy(&mut r, &mut uw).await?;
+    let mut buf_wraper = tokio::io::BufReader::with_capacity(buf_size, r);
+    tokio::io::copy_buf(&mut buf_wraper, &mut uw).await?;
 
     Ok(())
 }

@@ -193,7 +193,15 @@ where
             vless.target.as_mut().unwrap().1 += 2;
             handle_udp(vless, buff, size, stream, config).await
         }
-        vless::SocketType::MUX => mux::xudp(stream, buff[..size].to_vec(), resolver).await,
+        vless::SocketType::MUX => {
+            mux::xudp(
+                stream,
+                buff[..size].to_vec(),
+                resolver,
+                config.udp_proxy_buffer_size.unwrap_or(1024 * 8),
+            )
+            .await
+        }
     } {
         if log() {
             println!("{peer_addr}: {e}")
@@ -244,59 +252,64 @@ where
         ))
     };
 
-    if let Some(tpbs) = config.tcp_proxy_buffer_size {
-        let _ = stream.write(&[0, 0]).await?;
+    let tpbs = config.tcp_proxy_buffer_size.unwrap_or(1024 * 8);
+    match config.tcp_proxy_mod {
+        config::TcpProxyMod::Bi => {
+            let _ = stream.write(&[0, 0]).await?;
 
-        let mut client_bi = tcp::TcpBiGeneric {
-            io: Pin::new(&mut stream),
-            signal: ch_snd.clone(),
-        };
+            let mut client_bi = tcp::TcpBiGeneric {
+                io: Pin::new(&mut stream),
+                signal: ch_snd.clone(),
+            };
 
-        let mut target_bi = tcp::TcpBiGeneric {
-            io: Pin::new(&mut target),
-            signal: ch_snd,
-        };
+            let mut target_bi = tcp::TcpBiGeneric {
+                io: Pin::new(&mut target),
+                signal: ch_snd,
+            };
+            if target_addr.port() == 53 || target_addr.port() == 853 {
+                // DNS does not require big buffer size
+                tokio::try_join!(
+                    timeout_handler,
+                    tokio::io::copy_bidirectional(&mut client_bi, &mut target_bi)
+                )?;
+            } else {
+                tokio::try_join!(
+                    timeout_handler,
+                    tokio::io::copy_bidirectional_with_sizes(
+                        &mut client_bi,
+                        &mut target_bi,
+                        tpbs,
+                        tpbs
+                    )
+                )?;
+            }
+        }
+        config::TcpProxyMod::Proxy => {
+            let (client_read, mut client_write) = tokio::io::split(stream);
+            let (target_read, mut target_write) = tokio::io::split(target);
 
-        if target_addr.port() == 53 || target_addr.port() == 853 {
-            // DNS does not require big buffer size
+            let _ = client_write.write(&[0, 0]).await?;
+
+            let mut tcpwriter_client = tcp::TcpWriterGeneric {
+                hr: Pin::new(&mut client_write),
+                signal: ch_snd.clone(),
+            };
+
+            let mut tcpwriter_target = tcp::TcpWriterGeneric {
+                hr: Pin::new(&mut target_write),
+                signal: ch_snd,
+            };
+
+            let mut bufwraper_client = tokio::io::BufReader::with_capacity(tpbs, client_read);
+            let mut bufwraper_target = tokio::io::BufReader::with_capacity(tpbs, target_read);
+
             tokio::try_join!(
                 timeout_handler,
-                tokio::io::copy_bidirectional(&mut client_bi, &mut target_bi)
-            )?;
-        } else {
-            tokio::try_join!(
-                timeout_handler,
-                tokio::io::copy_bidirectional_with_sizes(
-                    &mut client_bi,
-                    &mut target_bi,
-                    tpbs,
-                    tpbs
-                )
+                tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target),
+                tokio::io::copy_buf(&mut bufwraper_target, &mut tcpwriter_client),
             )?;
         }
-    } else {
-        let (mut client_read, mut client_write) = tokio::io::split(stream);
-        let (mut target_read, mut target_write) = tokio::io::split(target);
-
-        let _ = client_write.write(&[0, 0]).await?;
-
-        let mut tcpwriter_client = tcp::TcpWriterGeneric {
-            hr: Pin::new(&mut client_write),
-            signal: ch_snd.clone(),
-        };
-
-        let mut tcpwriter_target = tcp::TcpWriterGeneric {
-            hr: Pin::new(&mut target_write),
-            signal: ch_snd,
-        };
-
-        tokio::try_join!(
-            timeout_handler,
-            tokio::io::copy(&mut client_read, &mut tcpwriter_target),
-            tokio::io::copy(&mut target_read, &mut tcpwriter_client),
-        )?;
     }
-
     Ok(())
 }
 

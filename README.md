@@ -20,7 +20,8 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 ```json
 {
     "log": false, // Enable logging. Disable for maximum performance
-    "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB and utilizes tokio::io::copy for proxying. If a specific value is provided, tokio::io::copy_bidirectional_with_sizes is used instead.
+    "tcp_proxy_mod": "Proxy", // `Proxy` uses io::proxy_buf, `Bi` uses io::copy_bidirectional_with_sizes.
+    "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB.
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB.
     "tcp_idle_timeout": 300, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
     "udp_idle_timeout": 90, // UDP idle timeout in seconds
@@ -40,7 +41,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
     },
     "resolver": { // Built-in domain resolver supporting multiple protocols: udp, https, h3, tls, and quic
         "address": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google"
-        "ip_port": "1.1.1.1:53", // Standard port: UDP (53), HTTPS (443), TLS/QUIC (853)
+        "ip_port": "8.8.8.8:53", // Standard port: UDP (53), HTTPS (443), TLS/QUIC (853)
         "mode": "IPv4" // Options: 'IPv4' prioritizes IPv4 over IPv6; 'IPv6' prioritizes IPv6 over IPv4
     },
     "tcp_socket_options": {
@@ -48,7 +49,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
         "recv_buffer_size": null, // The size of the socket receive buffer, if set; null means default system size
         "nodelay": false, // Whether to disable Nagle’s algorithm; false means packets may be buffered for efficiency
         "keepalive": true, // Whether to enable keepalive packets to maintain connection activity
-        "listen_backlog": 4096 // Maximum number of queued connections waiting to be accepted
+        "listen_backlog": 128 // Maximum number of queued connections waiting to be accepted
     }
 }
 ```
