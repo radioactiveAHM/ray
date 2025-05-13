@@ -9,7 +9,7 @@ use tokio::{
 };
 
 use crate::{
-    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
+    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_staticref},
     verror::VError,
 };
 
@@ -82,23 +82,31 @@ pub async fn xudp<S>(
     buf_size: usize,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
-    let (mut client_read, client_write) = tokio::io::split(stream);
-
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
-
+    let stream_ghost = unsafe_staticref(&stream);
     let timeout_handler = async move {
+        let mut dur = 0;
         loop {
-            match timeout(std::time::Duration::from_secs(crate::uit()), async {
+            if dur >= crate::uit() {
+                break;
+            }
+            // idle mode
+            match timeout(std::time::Duration::from_secs(crate::uit() / 10), async {
                 ch_rcv.recv().await
             })
             .await
             {
-                Err(_) => break,
+                Err(_) => dur += crate::uit() / 10,
                 Ok(None) => break,
-                _ => continue,
+                _ => {
+                    dur = 0;
+                    continue;
+                }
             };
+            // check if connection is alive using peek
+            stream_ghost.peek().await?;
         }
 
         Err::<(), tokio::io::Error>(tokio::io::Error::new(
@@ -106,6 +114,8 @@ where
             "Connection idle timeout",
         ))
     };
+
+    let (mut client_read, client_write) = tokio::io::split(stream);
 
     if buffer.len() == 19 {
         drop(buffer);

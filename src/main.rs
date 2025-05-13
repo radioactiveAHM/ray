@@ -5,13 +5,14 @@ use std::{
 };
 
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     time::timeout,
 };
 use tokio_rustls::{
     TlsAcceptor,
     rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
+use utils::unsafe_staticref;
 
 mod auth;
 mod config;
@@ -50,6 +51,53 @@ fn resolver_mode() -> config::ResolvingMode {
 
 fn tso() -> config::TcpSocketOptions {
     unsafe { TSO }
+}
+
+trait PeekWraper {
+    async fn peek(&self) -> tokio::io::Result<()>;
+}
+impl PeekWraper for tokio::net::TcpStream {
+    async fn peek(&self) -> tokio::io::Result<()> {
+        let mut buf = [0; 2];
+        let mut wraper = ReadBuf::new(&mut buf);
+        std::future::poll_fn(|cx| match self.poll_peek(cx, &mut wraper) {
+            std::task::Poll::Pending => std::task::Poll::Ready(Ok(())),
+            std::task::Poll::Ready(Ok(size)) => {
+                if size == 0 {
+                    std::task::Poll::Ready(Err(tokio::io::Error::new(
+                        std::io::ErrorKind::ConnectionAborted,
+                        "Peek: ConnectionAborted",
+                    )))
+                } else {
+                    std::task::Poll::Ready(Ok(()))
+                }
+            }
+            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
+        })
+        .await
+    }
+}
+
+impl PeekWraper for tokio_rustls::server::TlsStream<tokio::net::TcpStream> {
+    async fn peek(&self) -> tokio::io::Result<()> {
+        let mut buf = [0; 2];
+        let mut wraper = ReadBuf::new(&mut buf);
+        std::future::poll_fn(|cx| match self.get_ref().0.poll_peek(cx, &mut wraper) {
+            std::task::Poll::Pending => std::task::Poll::Ready(Ok(())),
+            std::task::Poll::Ready(Ok(size)) => {
+                if size == 0 {
+                    std::task::Poll::Ready(Err(tokio::io::Error::new(
+                        std::io::ErrorKind::ConnectionAborted,
+                        "Peek: ConnectionAborted",
+                    )))
+                } else {
+                    std::task::Poll::Ready(Ok(()))
+                }
+            }
+            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
+        })
+        .await
+    }
 }
 
 #[tokio::main]
@@ -158,7 +206,7 @@ async fn stream_handler<S>(
     >,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
     let mut buff: Vec<u8> = vec![0; 1024 * 8];
     let mut size = stream.read(&mut buff).await?;
@@ -221,7 +269,7 @@ async fn handle_tcp<S>(
     config: &'static config::Config,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
     let (target_addr, body) = vless.target.as_ref().unwrap();
     let mut target = tcp::stream(*target_addr).await?;
@@ -231,19 +279,30 @@ where
     drop(buff);
 
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
+    let stream_ghost = unsafe_staticref(&stream);
     // A timeout controller listens for both upload and download activities. If there is no upload or download activity for a specified duration, the connection will be closed.
     let timeout_handler = async move {
+        let mut dur = 0;
         loop {
+            if dur >= config.tcp_idle_timeout {
+                break;
+            }
+            // idle mode
             match timeout(
-                std::time::Duration::from_secs(config.tcp_idle_timeout),
+                std::time::Duration::from_secs(config.tcp_idle_timeout / 10),
                 async { ch_rcv.recv().await },
             )
             .await
             {
-                Err(_) => break,
+                Err(_) => dur += config.tcp_idle_timeout / 10,
                 Ok(None) => break,
-                _ => continue,
+                _ => {
+                    dur = 0;
+                    continue;
+                }
             };
+            // check if connection is alive using peek
+            stream_ghost.peek().await?;
         }
 
         Err::<(), tokio::io::Error>(tokio::io::Error::new(
@@ -321,7 +380,7 @@ async fn handle_udp<S>(
     config: &'static config::Config,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
     let (target, body) = vless.target.as_ref().unwrap();
     let addrtype = {
@@ -344,18 +403,28 @@ where
     drop(buff);
 
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
-
+    let stream_ghost = unsafe_staticref(&stream);
     let timeout_handler = async move {
+        let mut dur = 0;
         loop {
-            match timeout(std::time::Duration::from_secs(uit()), async {
+            if dur >= uit() {
+                break;
+            }
+            // idle mode
+            match timeout(std::time::Duration::from_secs(uit() / 10), async {
                 ch_rcv.recv().await
             })
             .await
             {
-                Err(_) => break,
+                Err(_) => dur += uit() / 10,
                 Ok(None) => break,
-                _ => continue,
+                _ => {
+                    dur = 0;
+                    continue;
+                }
             };
+            // check if connection is alive using peek
+            stream_ghost.peek().await?;
         }
 
         Err::<(), tokio::io::Error>(tokio::io::Error::new(
