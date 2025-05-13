@@ -23,7 +23,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
     "tcp_proxy_mod": "Proxy", // `Proxy` uses io::proxy_buf, `Bi` uses io::copy_bidirectional_with_sizes.
     "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB.
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB.
-    "tcp_idle_timeout": 300, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
+    "tcp_idle_timeout": 150, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
     "udp_idle_timeout": 90, // UDP idle timeout in seconds
     "listen": "[::]:80", // Server listening address and port. [::] works for both ipv4 and ipv6 in linux.
     "users": [ // User list
@@ -35,6 +35,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
     "transporter": "TCP", // Transport protocol
     "tls": { // TLS Configuration
         "enable": false, // Enable tls
+        "max_fragment_size": null, // The maximum size of plaintext input to be emitted in a single TLS record. A value of null is equivalent to the TLS maximum of 16 kB.
         "alpn": ["h2", "http/1.1"],
         "certificate": "cert.pem", // Certificate Path
         "key": "key.pem" // Key Path

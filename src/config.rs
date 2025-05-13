@@ -12,6 +12,7 @@ pub struct TcpSocketOptions {
 #[derive(serde::Deserialize)]
 pub struct Tls {
     pub enable: bool,
+    pub max_fragment_size: Option<usize>,
     pub alpn: Vec<String>,
     pub certificate: String,
     pub key: String,

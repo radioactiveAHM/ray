@@ -142,6 +142,7 @@ async fn main() {
             .iter()
             .map(|p| p.as_bytes().to_vec())
             .collect();
+        c.max_fragment_size = config.tls.max_fragment_size;
         let acceptor = TlsAcceptor::from(Arc::new(c));
 
         loop {
