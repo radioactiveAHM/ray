@@ -269,18 +269,18 @@ where
             if target_addr.port() == 53 || target_addr.port() == 853 {
                 // DNS does not require big buffer size
                 tokio::try_join!(
+                    tokio::io::copy_bidirectional(&mut client_bi, &mut target_bi),
                     timeout_handler,
-                    tokio::io::copy_bidirectional(&mut client_bi, &mut target_bi)
                 )?;
             } else {
                 tokio::try_join!(
-                    timeout_handler,
                     tokio::io::copy_bidirectional_with_sizes(
                         &mut client_bi,
                         &mut target_bi,
                         tpbs,
                         tpbs
-                    )
+                    ),
+                    timeout_handler,
                 )?;
             }
         }
@@ -304,9 +304,9 @@ where
             let mut bufwraper_target = tokio::io::BufReader::with_capacity(tpbs, target_read);
 
             tokio::try_join!(
-                timeout_handler,
                 tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target),
                 tokio::io::copy_buf(&mut bufwraper_target, &mut tcpwriter_client),
+                timeout_handler,
             )?;
         }
     }
