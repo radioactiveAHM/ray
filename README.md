@@ -15,12 +15,15 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 
 ## Configuration File `config.json`
 
-**Notes:** Increasing the buffer size for `tcp_proxy_buffer_size` and `udp_proxy_buffer_size` enhances throughput and reduces latency and cpu usage. However, be mindful of memory usage and the number of users if the system runs out of memory, the application will crash.
+**Notes:**
+
+- Increasing the buffer size for `tcp_proxy_buffer_size` and `udp_proxy_buffer_size` enhances throughput and reduces latency and cpu usage. However, be mindful of memory usage and the number of users if the system runs out of memory, the application will crash.
+- **Stack Proxy Method:** A built-in TCP proxy method that avoids buffering across multiple reads and does not require flushing. Unlike other methods, the buffer is allocated directly on the stack, ensuring efficient memory usage. Buffer sizes are limited to `4`, `8`, `16`, `32`, and `64`, each multiplied by `1024` (e.g., `4` corresponds to `4096` bytes).
 
 ```json
 {
     "log": false, // Enable logging. Disable for maximum performance
-    "tcp_proxy_mod": "Proxy", // `Proxy` uses io::proxy_buf, `Bi` uses io::copy_bidirectional_with_sizes.
+    "tcp_proxy_mod": "Proxy", // `Proxy` uses io::proxy_buf, `Bi` uses io::copy_bidirectional_with_sizes, `Stack` uses pipe::stack_copy.
     "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB.
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)

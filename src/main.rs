@@ -25,6 +25,7 @@ mod udputils;
 mod utils;
 mod verror;
 mod vless;
+mod pipe;
 
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
@@ -365,6 +366,36 @@ where
             if let Err(e) = tokio::try_join!(
                 tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target),
                 tokio::io::copy_buf(&mut bufwraper_target, &mut tcpwriter_client),
+                timeout_handler,
+            ) {
+                let _ = tcpwriter_target.shutdown().await;
+                let _ = tcpwriter_client.shutdown().await;
+                return Err(e);
+            }
+        },
+        config::TcpProxyMod::Stack => {
+            let mut tpbs = config.tcp_proxy_buffer_size.unwrap_or(8);
+            if target_addr.port() == 53 || target_addr.port() == 853 {
+                tpbs = 4;
+            }
+            let (client_read, mut client_write) = tokio::io::split(stream);
+            let (target_read, mut target_write) = tokio::io::split(target);
+
+            let _ = client_write.write(&[0, 0]).await?;
+
+            let mut tcpwriter_client = tcp::TcpWriterGeneric {
+                hr: Pin::new(&mut client_write),
+                signal: ch_snd.clone(),
+            };
+
+            let mut tcpwriter_target = tcp::TcpWriterGeneric {
+                hr: Pin::new(&mut target_write),
+                signal: ch_snd,
+            };
+
+            if let Err(e) = tokio::try_join!(
+                pipe::stack_copy(client_read, &mut tcpwriter_target, tpbs),
+                pipe::stack_copy(target_read, &mut tcpwriter_client, tpbs),
                 timeout_handler,
             ) {
                 let _ = tcpwriter_target.shutdown().await;

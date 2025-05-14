@@ -59,6 +59,7 @@ pub struct Resolver {
 pub enum TcpProxyMod {
     Proxy,
     Bi,
+    Stack
 }
 
 #[derive(serde::Deserialize)]
