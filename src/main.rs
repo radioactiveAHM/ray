@@ -328,12 +328,16 @@ where
             };
             if target_addr.port() == 53 || target_addr.port() == 853 {
                 // DNS does not require big buffer size
-                tokio::try_join!(
+                if let Err(e) = tokio::try_join!(
                     tokio::io::copy_bidirectional(&mut client_bi, &mut target_bi),
                     timeout_handler,
-                )?;
+                ) {
+                    let _ = stream.shutdown().await;
+                    let _ = target.shutdown().await;
+                    return Err(e);
+                };
             } else {
-                tokio::try_join!(
+                if let Err(e) = tokio::try_join!(
                     tokio::io::copy_bidirectional_with_sizes(
                         &mut client_bi,
                         &mut target_bi,
@@ -341,7 +345,11 @@ where
                         tpbs
                     ),
                     timeout_handler,
-                )?;
+                ) {
+                    let _ = stream.shutdown().await;
+                    let _ = target.shutdown().await;
+                    return Err(e);
+                };
             }
         }
         config::TcpProxyMod::Proxy => {
@@ -363,11 +371,15 @@ where
             let mut bufwraper_client = tokio::io::BufReader::with_capacity(tpbs, client_read);
             let mut bufwraper_target = tokio::io::BufReader::with_capacity(tpbs, target_read);
 
-            tokio::try_join!(
+            if let Err(e) = tokio::try_join!(
                 tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target),
                 tokio::io::copy_buf(&mut bufwraper_target, &mut tcpwriter_client),
                 timeout_handler,
-            )?;
+            ) {
+                let _ = tcpwriter_target.shutdown().await;
+                let _ = tcpwriter_client.shutdown().await;
+                return Err(e);
+            }
         }
     }
     Ok(())
@@ -442,12 +454,15 @@ where
     };
 
     // proxy UDP
-    let (client_read, client_write) = tokio::io::split(stream);
-    tokio::try_join!(
+    let (client_read, mut client_write) = tokio::io::split(stream);
+    if let Err(e) = tokio::try_join!(
         timeout_handler,
         udputils::copy_t2u(&udp, client_read, ch_snd.clone(), buf_size),
-        udputils::copy_u2t(&udp, client_write, ch_snd)
-    )?;
+        udputils::copy_u2t(&udp, &mut client_write, ch_snd)
+    ) {
+        let _ = client_write.shutdown().await;
+        return Err(e);
+    };
 
     Ok(())
 }

@@ -115,7 +115,7 @@ where
         ))
     };
 
-    let (mut client_read, client_write) = tokio::io::split(stream);
+    let (mut client_read, mut client_write) = tokio::io::split(stream);
 
     if buffer.len() == 19 {
         drop(buffer);
@@ -152,7 +152,7 @@ where
         tokio::try_join!(
             timeout_handler,
             singbox::copy_t2u(&udp, client_read, &head, ch_snd.clone(), buf_size),
-            copy_u2t(&udp, client_write, &head, ch_snd)
+            copy_u2t(&udp, &mut client_write, &head, ch_snd)
         )?;
     } else if buffer.len() > 19 {
         // xray way
@@ -190,11 +190,14 @@ where
             }
         }
 
-        tokio::try_join!(
+        if let Err(e) = tokio::try_join!(
             timeout_handler,
             xray::copy_t2u(&udp, client_read, &head, buffer, ch_snd.clone(), buf_size),
-            copy_u2t(&udp, client_write, &head, ch_snd)
-        )?;
+            copy_u2t(&udp, &mut client_write, &head, ch_snd)
+        ) {
+            let _ = client_write.shutdown().await;
+            return Err(e);
+        };
     }
 
     Ok(())
@@ -202,7 +205,7 @@ where
 
 pub async fn copy_u2t<W>(
     udp: &tokio::net::UdpSocket,
-    mut w: tokio::io::WriteHalf<W>,
+    w: &mut tokio::io::WriteHalf<W>,
     head: &[u8],
     ch_snd: tokio::sync::mpsc::Sender<()>,
 ) -> tokio::io::Result<()>
