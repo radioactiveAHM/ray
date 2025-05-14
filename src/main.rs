@@ -312,7 +312,10 @@ where
         ))
     };
 
-    let tpbs = config.tcp_proxy_buffer_size.unwrap_or(1024 * 8);
+    let mut tpbs = config.tcp_proxy_buffer_size.unwrap_or(1024 * 8);
+    if target_addr.port() == 53 || target_addr.port() == 853 {
+        tpbs = 1024 * 8;
+    }
     match config.tcp_proxy_mod {
         config::TcpProxyMod::Bi => {
             let _ = stream.write(&[0, 0]).await?;
@@ -326,31 +329,19 @@ where
                 io: Pin::new(&mut target),
                 signal: ch_snd,
             };
-            if target_addr.port() == 53 || target_addr.port() == 853 {
-                // DNS does not require big buffer size
-                if let Err(e) = tokio::try_join!(
-                    tokio::io::copy_bidirectional(&mut client_bi, &mut target_bi),
-                    timeout_handler,
-                ) {
-                    let _ = stream.shutdown().await;
-                    let _ = target.shutdown().await;
-                    return Err(e);
-                };
-            } else {
-                if let Err(e) = tokio::try_join!(
-                    tokio::io::copy_bidirectional_with_sizes(
-                        &mut client_bi,
-                        &mut target_bi,
-                        tpbs,
-                        tpbs
-                    ),
-                    timeout_handler,
-                ) {
-                    let _ = stream.shutdown().await;
-                    let _ = target.shutdown().await;
-                    return Err(e);
-                };
-            }
+            if let Err(e) = tokio::try_join!(
+                tokio::io::copy_bidirectional_with_sizes(
+                    &mut client_bi,
+                    &mut target_bi,
+                    tpbs,
+                    tpbs
+                ),
+                timeout_handler,
+            ) {
+                let _ = stream.shutdown().await;
+                let _ = target.shutdown().await;
+                return Err(e);
+            };
         }
         config::TcpProxyMod::Proxy => {
             let (client_read, mut client_write) = tokio::io::split(stream);
