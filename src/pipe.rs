@@ -23,8 +23,8 @@ pub async fn stack_copy<R, W>(r: R, w: &mut W, size: usize) -> tokio::io::Result
             copy(r, w, &mut buf).await
         },
         _ => {
-            println!("Buffer size not supported");
-            std::process::exit(0);
+            let mut buf = vec![0u8; size*1024];
+            copy(r, w, &mut buf).await
         }
     }
 }

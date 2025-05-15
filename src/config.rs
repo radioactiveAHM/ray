@@ -65,6 +65,7 @@ pub enum TcpProxyMod {
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub log: bool,
+    pub thread_stack_size: Option<usize>,
     pub tcp_proxy_mod: TcpProxyMod,
     pub tcp_proxy_buffer_size: Option<usize>,
     pub udp_proxy_buffer_size: Option<usize>,

@@ -101,13 +101,24 @@ impl PeekWraper for tokio_rustls::server::TlsStream<tokio::net::TcpStream> {
     }
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    let c = config::load_config();
+    if let Some(size) = c.thread_stack_size {
+        tokio::runtime::Builder::new_multi_thread().enable_all().thread_stack_size(size).build().unwrap().block_on(async {
+            async_main(c).await;
+        });
+    } else {
+        tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
+            async_main(c).await;
+        });
+    }
+}
+
+async fn async_main(c: config::Config ) {
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
     // Load config and convert to &'static
-    let c = config::load_config();
     let config: &'static config::Config = utils::unsafe_staticref(&c);
 
     let resolver = resolver::generate_resolver(&config.resolver);

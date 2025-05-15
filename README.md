@@ -18,11 +18,13 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 **Notes:**
 
 - Increasing the buffer size for `tcp_proxy_buffer_size` and `udp_proxy_buffer_size` enhances throughput and reduces latency and cpu usage. However, be mindful of memory usage and the number of users if the system runs out of memory, the application will crash.
-- **Stack Proxy Method:** A built-in TCP proxy method that avoids buffering across multiple reads and does not require flushing. Unlike other methods, the buffer is allocated directly on the stack, ensuring efficient memory usage. Buffer sizes are limited to `4`, `8`, `16`, `32`, and `64`, each multiplied by `1024` (e.g., `4` corresponds to `4096` bytes).
+- **Stack Proxy Method:** A built-in TCP proxy method that avoids buffering across multiple reads and does not require flushing. Unlike other methods, the buffer is allocated directly on the stack, ensuring efficient memory usage. Stack allocated Buffer sizes are limited to `4`, `8`, `16`, `32`, and `64`, each multiplied by `1024` (e.g., `4` corresponds to `4096` bytes) other sizes allocated on heap.
+- When using the Stack Proxy Method with a stack-allocated buffer, there is a risk of exceeding the stack size, leading to a potential crash. To mitigate this, adjust the `thread_stack_size` accordingly.
 
 ```json
 {
     "log": false, // Enable logging. Disable for maximum performance
+    "thread_stack_size": null, // The stack size (in bytes) for worker threads. The default stack size for spawned threads is 2 MiB. The actual stack size may be greater than this value if the platform specifies minimal stack size.
     "tcp_proxy_mod": "Proxy", // `Proxy` uses io::proxy_buf, `Bi` uses io::copy_bidirectional_with_sizes, `Stack` uses pipe::stack_copy.
     "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB.
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB.
