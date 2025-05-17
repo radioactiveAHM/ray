@@ -26,7 +26,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
     "log": false, // Enable logging. Disable for maximum performance
     "thread_stack_size": null, // The stack size (in bytes) for worker threads. The default stack size for spawned threads is 2 MiB. The actual stack size may be greater than this value if the platform specifies minimal stack size.
     "tcp_proxy_mod": "Proxy", // `Proxy` uses io::proxy_buf, `Bi` uses io::copy_bidirectional_with_sizes, `Stack` uses pipe::stack_copy.
-    "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB.
+    "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. For `Proxy` and `Bi` proxy mode unit is bytes but for `Stack` unit Kb.
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
     "udp_idle_timeout": 90, // UDP idle timeout in seconds
@@ -56,7 +56,8 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
         "nodelay": false, // Whether to disable Nagle’s algorithm; false means packets may be buffered for efficiency
         "keepalive": true, // Whether to enable keepalive packets to maintain connection activity
         "listen_backlog": 128 // Maximum number of queued connections waiting to be accepted
-    }
+    },
+    "blacklist": null // Domain blacklist
 }
 ```
 
@@ -90,4 +91,24 @@ HttpUpgrade
             "method": "GET"
         }
     }
+```
+
+## Blacklist Configuration
+
+```json
+    "blacklist": [
+        { // Black list object
+            "name": "google", // List name
+            "domains": [ // List of domains
+                "google.com",
+                "www.google.com"
+            ]
+        },
+        {
+            "name": "facebook",
+            "domains": [
+                "facebook.com"
+            ]
+        },
+    ]
 ```

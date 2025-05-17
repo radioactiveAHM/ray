@@ -32,5 +32,6 @@
         "nodelay": false,
         "keepalive": true,
         "listen_backlog": 128
-    }
+    },
+    "blacklist": null
 }

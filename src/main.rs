@@ -26,6 +26,7 @@ mod utils;
 mod verror;
 mod vless;
 mod pipe;
+mod blacklist;
 
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
@@ -243,7 +244,7 @@ where
         }
     }
 
-    let mut vless = vless::Vless::new(&buff[..size], resolver).await?;
+    let mut vless = vless::Vless::new(&buff[..size], resolver, &config.blacklist).await?;
     if auth::authenticate(config, &vless, peer_addr) {
         return Err(verror::VError::AuthenticationFailed.into());
     }
@@ -259,7 +260,8 @@ where
                 stream,
                 buff[..size].to_vec(),
                 resolver,
-                config.udp_proxy_buffer_size.unwrap_or(1024 * 8),
+                &config.blacklist,
+                config.udp_proxy_buffer_size.unwrap_or(1024 * 8)
             )
             .await
         }

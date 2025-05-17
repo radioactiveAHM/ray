@@ -31,6 +31,7 @@ async fn parse_target(
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
     >,
+    blacklist: &Option<Vec<crate::config::BlackList>>
 ) -> Result<(SocketAddr, usize), VError> {
     match buff[21] {
         1 => Ok((
@@ -42,6 +43,10 @@ async fn parse_target(
         )),
         2 => {
             if let Ok(s) = core::str::from_utf8(&buff[23..buff[22] as usize + 23]) {
+                if let Some(bl) = blacklist {
+                    // if there is a blacklist
+                    crate::blacklist::containing(bl, s)?;
+                }
                 match crate::resolver::resolve(resolver, s, port).await {
                     Ok(ip) => Ok((ip, 23 + buff[22] as usize)),
                     Err(e) => Err(e),
@@ -104,6 +109,7 @@ impl Vless {
                 hickory_resolver::proto::runtime::TokioRuntimeProvider,
             >,
         >,
+        blacklist: &Option<Vec<crate::config::BlackList>>
     ) -> Result<Self, VError> {
         if buff.is_empty() {
             return Err(VError::Unknown);
@@ -132,7 +138,7 @@ impl Vless {
         let mut v = Self {
             uuid: [0; 16],
             rt: parse_socket(buff[18])?,
-            target: Some(parse_target(buff, port, resolver).await?),
+            target: Some(parse_target(buff, port, resolver, blacklist).await?),
         };
 
         v.uuid.copy_from_slice(&buff[1..17]);

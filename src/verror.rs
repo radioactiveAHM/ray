@@ -17,6 +17,7 @@ pub enum VError {
     BufferOverflow,
     UdpDeadLoop,
     MailFormedUdpPacket,
+    DomainInBlacklist
 }
 impl Display for VError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -36,6 +37,7 @@ impl Display for VError {
             VError::ResolveDnsFailed => write!(f, "ResolveDnsFailed"),
             VError::YameteKudasai => write!(f, "YameteKudasai"),
             VError::BufferOverflow => write!(f, "BufferOverflow"),
+            VError::DomainInBlacklist => write!(f, "Domain In Blacklist")
         }
     }
 }

@@ -1,5 +1,11 @@
 use std::net::SocketAddr;
 
+#[derive(serde::Deserialize)]
+pub struct BlackList {
+    pub name: String,
+    pub domains: Vec<String>
+}
+
 #[derive(serde::Deserialize, Clone, Copy)]
 pub struct TcpSocketOptions {
     pub send_buffer_size: Option<u32>,
@@ -77,6 +83,7 @@ pub struct Config {
     pub tls: Tls,
     pub resolver: Resolver,
     pub tcp_socket_options: TcpSocketOptions,
+    pub blacklist: Option<Vec<BlackList>>
 }
 
 pub fn load_config() -> Config {

@@ -21,6 +21,7 @@ async fn parse_target(
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
     >,
+    blacklist: &Option<Vec<crate::config::BlackList>>
 ) -> Result<(SocketAddr, usize, usize), VError> {
     match buff[9] {
         1 => Ok((
@@ -33,6 +34,10 @@ async fn parse_target(
         )),
         2 => {
             if let Ok(s) = core::str::from_utf8(&buff[11..buff[10] as usize + 11]) {
+                if let Some(bl) = blacklist {
+                    // if there is a blacklist
+                    crate::blacklist::containing(bl, s)?;
+                }
                 match crate::resolver::resolve(resolver, s, port).await {
                     Ok(ip) => Ok((
                         ip,
@@ -79,6 +84,7 @@ pub async fn xudp<S>(
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
     >,
+    blacklist: &Option<Vec<crate::config::BlackList>>,
     buf_size: usize,
 ) -> tokio::io::Result<()>
 where
@@ -129,7 +135,7 @@ where
             let mut mux_id = [0; 6];
             mux_id.copy_from_slice(&buff[1..7]);
             let port = convert_two_u8s_to_u16_be([buff[7], buff[8]]);
-            let target = parse_target(&buff[..size], port, resolver).await?;
+            let target = parse_target(&buff[..size], port, resolver, blacklist).await?;
 
             let addrtype = {
                 if target.0.is_ipv4() {
@@ -164,7 +170,7 @@ where
             let mut mux_id = [0; 6];
             mux_id.copy_from_slice(&buffer[1..7]);
             let port = convert_two_u8s_to_u16_be([buffer[7], buffer[8]]);
-            let target = parse_target(&buffer, port, resolver).await?;
+            let target = parse_target(&buffer, port, resolver, blacklist).await?;
 
             let addrtype = {
                 if target.0.is_ipv4() {
