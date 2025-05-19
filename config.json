@@ -1,7 +1,7 @@
 {
     "log": false,
     "thread_stack_size": null,
-    "tcp_proxy_mod": "Proxy",
+    "tcp_proxy_mod": "Stack",
     "tcp_proxy_buffer_size": null,
     "udp_proxy_buffer_size": null,
     "tcp_idle_timeout": 150,
@@ -29,8 +29,8 @@
     "tcp_socket_options": {
         "send_buffer_size": null,
         "recv_buffer_size": null,
-        "nodelay": false,
-        "keepalive": true,
+        "nodelay": null,
+        "keepalive": null,
         "listen_backlog": 128
     },
     "blacklist": null

@@ -1,3 +1,4 @@
+#[inline(always)]
 pub fn authenticate(
     c: &'static crate::config::Config,
     vconn: &crate::vless::Vless,

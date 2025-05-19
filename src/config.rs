@@ -10,8 +10,8 @@ pub struct BlackList {
 pub struct TcpSocketOptions {
     pub send_buffer_size: Option<u32>,
     pub recv_buffer_size: Option<u32>,
-    pub nodelay: bool,
-    pub keepalive: bool,
+    pub nodelay: Option<bool>,
+    pub keepalive: Option<bool>,
     pub listen_backlog: u32,
 }
 
@@ -33,7 +33,6 @@ pub struct Http {
 }
 
 #[derive(serde::Deserialize)]
-#[allow(dead_code)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Transporter {
     TCP,
@@ -63,8 +62,7 @@ pub struct Resolver {
 
 #[derive(serde::Deserialize, Clone, Copy)]
 pub enum TcpProxyMod {
-    Proxy,
-    Bi,
+    Buffer,
     Stack
 }
 

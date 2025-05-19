@@ -34,9 +34,9 @@ static mut RESOLVER_MODE: config::ResolvingMode = config::ResolvingMode::IPv4;
 static mut TSO: config::TcpSocketOptions = config::TcpSocketOptions {
     send_buffer_size: None,
     recv_buffer_size: None,
-    nodelay: false,
-    keepalive: true,
-    listen_backlog: 4096,
+    nodelay: None,
+    keepalive: None,
+    listen_backlog: 128,
 };
 
 fn log() -> bool {
@@ -280,7 +280,7 @@ async fn handle_tcp<S>(
     vless: vless::Vless,
     buff: Vec<u8>,
     size: usize,
-    mut stream: S,
+    stream: S,
     config: &'static config::Config,
 ) -> tokio::io::Result<()>
 where
@@ -331,33 +331,7 @@ where
         tpbs = 1024 * 8;
     }
     match config.tcp_proxy_mod {
-        config::TcpProxyMod::Bi => {
-            let _ = stream.write(&[0, 0]).await?;
-
-            let mut client_bi = tcp::TcpBiGeneric {
-                io: Pin::new(&mut stream),
-                signal: ch_snd.clone(),
-            };
-
-            let mut target_bi = tcp::TcpBiGeneric {
-                io: Pin::new(&mut target),
-                signal: ch_snd,
-            };
-            if let Err(e) = tokio::try_join!(
-                tokio::io::copy_bidirectional_with_sizes(
-                    &mut client_bi,
-                    &mut target_bi,
-                    tpbs,
-                    tpbs
-                ),
-                timeout_handler,
-            ) {
-                let _ = stream.shutdown().await;
-                let _ = target.shutdown().await;
-                return Err(e);
-            };
-        }
-        config::TcpProxyMod::Proxy => {
+        config::TcpProxyMod::Buffer => {
             let (client_read, mut client_write) = tokio::io::split(stream);
             let (target_read, mut target_write) = tokio::io::split(target);
 
