@@ -15,8 +15,10 @@ use tokio_rustls::{
 use utils::unsafe_staticref;
 
 mod auth;
+mod blacklist;
 mod config;
 mod mux;
+mod pipe;
 mod resolver;
 mod tcp;
 mod tls;
@@ -25,8 +27,6 @@ mod udputils;
 mod utils;
 mod verror;
 mod vless;
-mod pipe;
-mod blacklist;
 
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
@@ -105,17 +105,26 @@ impl PeekWraper for tokio_rustls::server::TlsStream<tokio::net::TcpStream> {
 fn main() {
     let c = config::load_config();
     if let Some(size) = c.thread_stack_size {
-        tokio::runtime::Builder::new_multi_thread().enable_all().thread_stack_size(size).build().unwrap().block_on(async {
-            async_main(c).await;
-        });
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .thread_stack_size(size)
+            .build()
+            .unwrap()
+            .block_on(async {
+                async_main(c).await;
+            });
     } else {
-        tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
-            async_main(c).await;
-        });
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                async_main(c).await;
+            });
     }
 }
 
-async fn async_main(c: config::Config ) {
+async fn async_main(c: config::Config) {
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
@@ -261,7 +270,7 @@ where
                 buff[..size].to_vec(),
                 resolver,
                 &config.blacklist,
-                config.udp_proxy_buffer_size.unwrap_or(1024 * 8)
+                config.udp_proxy_buffer_size.unwrap_or(1024 * 8),
             )
             .await
         }
@@ -359,7 +368,7 @@ where
                 let _ = tcpwriter_client.shutdown().await;
                 return Err(e);
             }
-        },
+        }
         config::TcpProxyMod::Stack => {
             let mut tpbs = config.tcp_proxy_buffer_size.unwrap_or(8);
             if target_addr.port() == 53 || target_addr.port() == 853 {

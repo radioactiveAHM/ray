@@ -9,15 +9,16 @@ pub enum VError {
     AuthenticationFailed,
     Wtf,
     TransporterError,
-    MailFormedSingboxMuxPacket,
-    MailFormedXrayMuxPacket,
+    MuxError,
+    MuxCloseConnection,
+    MuxBufferOverflow,
     NoHost,
     ResolveDnsFailed,
     YameteKudasai,
     BufferOverflow,
     UdpDeadLoop,
     MailFormedUdpPacket,
-    DomainInBlacklist
+    DomainInBlacklist,
 }
 impl Display for VError {
     #[cold]
@@ -30,15 +31,16 @@ impl Display for VError {
             VError::AuthenticationFailed => write!(f, "AuthenticationFailed"),
             VError::Wtf => write!(f, "WTF"),
             VError::TransporterError => write!(f, "TransporterError"),
-            VError::MailFormedSingboxMuxPacket => write!(f, "MailFormedSingboxMuxPacket"),
-            VError::MailFormedXrayMuxPacket => write!(f, "MailFormedXrayMuxPacket"),
+            VError::MuxError => write!(f, "MuxError"),
+            VError::MuxCloseConnection => write!(f, "MuxCloseConnection"),
+            VError::MuxBufferOverflow => write!(f, "MuxBufferOverflow"),
             VError::UdpDeadLoop => write!(f, "UdpDeadLoop"),
             VError::MailFormedUdpPacket => write!(f, "MailFormedUdpPacket"),
             VError::NoHost => write!(f, "NoHost"),
             VError::ResolveDnsFailed => write!(f, "ResolveDnsFailed"),
             VError::YameteKudasai => write!(f, "YameteKudasai"),
             VError::BufferOverflow => write!(f, "BufferOverflow"),
-            VError::DomainInBlacklist => write!(f, "Domain In Blacklist")
+            VError::DomainInBlacklist => write!(f, "Domain In Blacklist"),
         }
     }
 }

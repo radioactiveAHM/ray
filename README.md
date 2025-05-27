@@ -30,7 +30,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
     "udp_idle_timeout": 90, // UDP idle timeout in seconds
-    "listen": "[::]:80", // Server listening address and port. [::] works for both ipv4 and ipv6 in linux.
+    "listen": "[::]:80", // Server listening address and port. [::] works for both ipv4 and ipv6 in linux (dual stack).
     "users": [ // User list
         {
             "name": "admin",

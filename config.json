@@ -6,7 +6,7 @@
     "udp_proxy_buffer_size": null,
     "tcp_idle_timeout": 150,
     "udp_idle_timeout": 90,
-    "listen": "[::]:80",
+    "listen": "0.0.0.0:80",
     "users": [
         {
             "name": "admin",

@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 #[derive(serde::Deserialize)]
 pub struct BlackList {
     pub name: String,
-    pub domains: Vec<String>
+    pub domains: Vec<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -63,7 +63,7 @@ pub struct Resolver {
 #[derive(serde::Deserialize, Clone, Copy)]
 pub enum TcpProxyMod {
     Buffer,
-    Stack
+    Stack,
 }
 
 #[derive(serde::Deserialize)]
@@ -81,7 +81,7 @@ pub struct Config {
     pub tls: Tls,
     pub resolver: Resolver,
     pub tcp_socket_options: TcpSocketOptions,
-    pub blacklist: Option<Vec<BlackList>>
+    pub blacklist: Option<Vec<BlackList>>,
 }
 
 pub fn load_config() -> Config {

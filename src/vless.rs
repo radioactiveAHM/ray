@@ -31,7 +31,7 @@ async fn parse_target(
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
     >,
-    blacklist: &Option<Vec<crate::config::BlackList>>
+    blacklist: &Option<Vec<crate::config::BlackList>>,
 ) -> Result<(SocketAddr, usize), VError> {
     match buff[21] {
         1 => Ok((
@@ -109,7 +109,7 @@ impl Vless {
                 hickory_resolver::proto::runtime::TokioRuntimeProvider,
             >,
         >,
-        blacklist: &Option<Vec<crate::config::BlackList>>
+        blacklist: &Option<Vec<crate::config::BlackList>>,
     ) -> Result<Self, VError> {
         if buff.is_empty() {
             return Err(VError::Unknown);
