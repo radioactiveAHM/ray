@@ -6,12 +6,13 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 
 - [x] HTTP
 - [x] HTTP Upgrade
+- [ ] XHTTP (Packet-up)
 
 ## Vless Request Commands
 
-- [x] TCP 0x01
-- [x] DNS UDP 0x02
-- [x] XUDP: Functional, but lacks mux support.
+- [x] TCP
+- [x] UDP
+- [x] XUDP: Supporting complete udp mux.
 
 ## Configuration File `config.json`
 
