@@ -222,7 +222,7 @@ pub async fn copy_t2u<R>(
 where
     R: AsyncRead + Unpin + Send,
 {
-    let mut b = Vec::with_capacity(buf_size);
+    let mut b = Vec::with_capacity(buf_size * 1024);
     b.extend_from_slice(&b0);
 
     handle_xudp_packets(

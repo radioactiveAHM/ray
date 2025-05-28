@@ -173,14 +173,14 @@ async fn async_main(c: config::Config) {
                     tokio::spawn(async move {
                         if let Err(e) = tls_handler(tc, config, cresolver).await {
                             if log() {
-                                println!("DoH server<TLS>: {e}")
+                                println!("TLS: {e}")
                             }
                         }
                     });
                 }
                 Err(e) => {
                     if log() {
-                        println!("DoH server<TLS>: {e}")
+                        println!("TLS: {e}")
                     }
                 }
             }
@@ -193,7 +193,7 @@ async fn async_main(c: config::Config) {
                     if let Ok(peer_addr) = stream.peer_addr() {
                         if let Err(e) = stream_handler(stream, config, peer_addr, cresolver).await {
                             if log() {
-                                println!("{e}");
+                                println!("NOTLS: {e}");
                             }
                         }
                     }
@@ -270,7 +270,7 @@ where
                 buff[..size].to_vec(),
                 resolver,
                 &config.blacklist,
-                config.udp_proxy_buffer_size.unwrap_or(1024 * 8),
+                config.udp_proxy_buffer_size.unwrap_or(8),
             )
             .await
         }
@@ -335,9 +335,9 @@ where
         ))
     };
 
-    let mut tpbs = config.tcp_proxy_buffer_size.unwrap_or(1024 * 8);
+    let mut tpbs = config.tcp_proxy_buffer_size.unwrap_or(8);
     if target_addr.port() == 53 || target_addr.port() == 853 {
-        tpbs = 1024 * 8;
+        tpbs = 8;
     }
     match config.tcp_proxy_mod {
         config::TcpProxyMod::Buffer => {
@@ -356,8 +356,8 @@ where
                 signal: ch_snd,
             };
 
-            let mut bufwraper_client = tokio::io::BufReader::with_capacity(tpbs, client_read);
-            let mut bufwraper_target = tokio::io::BufReader::with_capacity(tpbs, target_read);
+            let mut bufwraper_client = tokio::io::BufReader::with_capacity(tpbs*1024, client_read);
+            let mut bufwraper_target = tokio::io::BufReader::with_capacity(tpbs*1024, target_read);
 
             if let Err(e) = tokio::try_join!(
                 tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target),
@@ -370,10 +370,6 @@ where
             }
         }
         config::TcpProxyMod::Stack => {
-            let mut tpbs = config.tcp_proxy_buffer_size.unwrap_or(8);
-            if target_addr.port() == 53 || target_addr.port() == 853 {
-                tpbs = 4;
-            }
             let (client_read, mut client_write) = tokio::io::split(stream);
             let (target_read, mut target_write) = tokio::io::split(target);
 
@@ -466,9 +462,9 @@ where
 
     let buf_size = if target.port() == 53 || target.port() == 853 {
         // DNS does not require big buffer size
-        1024 * 8
+        8
     } else {
-        config.udp_proxy_buffer_size.unwrap_or(1024 * 8)
+        config.udp_proxy_buffer_size.unwrap_or(8)
     };
 
     // proxy UDP
