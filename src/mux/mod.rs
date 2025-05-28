@@ -156,6 +156,7 @@ pub async fn copy_u2t<W>(
 where
     W: AsyncWrite + Unpin + Send,
 {
+    let _ = w.write([0,0].as_slice()).await?;
     // K: Keep Sub Connections (Keep)
     //                       H Len   ID   K Opt UDP
     //                       |___|  |--|  |  |  |
@@ -191,7 +192,6 @@ where
         let _ = w
             .write(
                 &[
-                    [0u8, 0].as_slice(),
                     &head,
                     port.as_slice(),
                     &addrtype_and_addr,
@@ -254,6 +254,46 @@ async fn handle_xudp_packets<R>(
 where
     R: AsyncRead + Unpin + Send,
 {
+    // --> handle first packet if avaliable
+    if internal_buf.len() > 2 {
+        let head_size = convert_two_u8s_to_u16_be([internal_buf[0], internal_buf[1]]) as usize;
+        if internal_buf.len() >= head_size + 2 {
+            if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
+                // Stat: New Subjoin
+                let target = parse_target(
+                    &internal_buf[2..],
+                    resolver,
+                    blacklist,
+                    domain_map.clone(),
+                )
+                .await?;
+                let opt = internal_buf[5] == 1;
+                if opt {
+                    let opt_len = convert_two_u8s_to_u16_be([
+                        internal_buf[head_size + 2],
+                        internal_buf[head_size + 3],
+                    ]) as usize;
+                    let opt_body = &internal_buf[2 + head_size + 2..];
+                    if opt_body.len() >= opt_len {
+                        // send body and clean up
+                        let _ = udp.send_to(&opt_body[..opt_len], target).await?;
+                        internal_buf.drain(..2 + head_size + 2 + opt_len);
+                    }
+                } else {
+                    // no body, remove header and continue
+                    internal_buf.drain(..2 + head_size);
+                }
+            } else if internal_buf[2..5] == [0, 0, 4] || internal_buf[2..5] == [0, 0, 3] {
+                // KeepAlive
+                // head len: 4
+                internal_buf.drain(..2 + 4);
+            } else {
+                return Err(crate::verror::VError::MuxError.into());
+            }
+        }
+    };
+    // <--
+
     let mut buf = [0; 1024 * 8];
     let mut wrapper = ReadBuf::new(&mut buf);
     loop {
@@ -289,7 +329,7 @@ where
                         break;
                     }
                     if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
-                        // Stat: New Subjoin
+                        // Stat: New Subjoin and Keep frames
                         let target = parse_target(
                             &internal_buf[2..],
                             resolver,
@@ -316,7 +356,7 @@ where
                             internal_buf.drain(..2 + head_size);
                         }
                     } else if internal_buf[2..5] == [0, 0, 4] || internal_buf[2..5] == [0, 0, 3] {
-                        // KeepAlive
+                        // KeepAlive and End frames
                         // head len: 4
                         internal_buf.drain(..2 + 4);
                     } else {

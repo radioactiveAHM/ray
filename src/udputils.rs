@@ -134,8 +134,6 @@ where
         b: Vec::with_capacity(buf_size),
         ch_snd,
     };
-    let mut buf_wraper = tokio::io::BufReader::with_capacity(buf_size, r);
-    tokio::io::copy_buf(&mut buf_wraper, &mut uw).await?;
 
-    Ok(())
+    crate::pipe::stack_copy(r, &mut uw, buf_size).await
 }
