@@ -156,7 +156,7 @@ pub async fn copy_u2t<W>(
 where
     W: AsyncWrite + Unpin + Send,
 {
-    let _ = w.write([0,0].as_slice()).await?;
+    let _ = w.write([0, 0].as_slice()).await?;
     // K: Keep Sub Connections (Keep)
     //                       H Len   ID   K Opt UDP
     //                       |___|  |--|  |  |  |
@@ -260,13 +260,9 @@ where
         if internal_buf.len() >= head_size + 2 {
             if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
                 // Stat: New Subjoin
-                let target = parse_target(
-                    &internal_buf[2..],
-                    resolver,
-                    blacklist,
-                    domain_map.clone(),
-                )
-                .await?;
+                let target =
+                    parse_target(&internal_buf[2..], resolver, blacklist, domain_map.clone())
+                        .await?;
                 let opt = internal_buf[5] == 1;
                 if opt {
                     let opt_len = convert_two_u8s_to_u16_be([

@@ -54,9 +54,6 @@ pub fn tcpsocket(a: SocketAddr, minimize: bool) -> tokio::io::Result<TcpSocket> 
         } else if socket.set_send_buffer_size(1024 * 16).is_ok() {
             let _ = socket.set_recv_buffer_size(1024 * 16);
         }
-
-        let _ = socket.set_nodelay(true);
-        let _ = socket.set_keepalive(true);
     } else {
         let options = crate::tso();
         if let Some(sbs) = options.send_buffer_size {
