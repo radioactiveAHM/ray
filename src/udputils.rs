@@ -4,7 +4,7 @@ use crate::utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
 pub async fn copy_u2t<W>(
     udp: &tokio::net::UdpSocket,
-    w: &mut tokio::io::WriteHalf<W>,
+    mut w: W,
     ch_snd: tokio::sync::mpsc::Sender<()>,
 ) -> tokio::io::Result<()>
 where
@@ -122,7 +122,7 @@ impl AsyncWrite for UdpWriter<'_> {
 
 pub async fn copy_t2u<R>(
     udp: &tokio::net::UdpSocket,
-    r: tokio::io::ReadHalf<R>,
+    r: R,
     ch_snd: tokio::sync::mpsc::Sender<()>,
     buf_size: usize,
 ) -> tokio::io::Result<()>

@@ -13,6 +13,12 @@ pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
     unsafe { std::mem::transmute::<&'a T, &'static T>(r) }
 }
 
+#[allow(mutable_transmutes)]
+#[inline(always)]
+pub fn unsafe_refmut<'a, T: ?Sized>(r: &'a T) -> &'a mut T {
+    unsafe { std::mem::transmute::<&'a T, &mut T>(r) }
+}
+
 #[inline(always)]
 pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
     if find.len() >= buff.len() {

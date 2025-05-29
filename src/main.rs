@@ -12,7 +12,7 @@ use tokio_rustls::{
     TlsAcceptor,
     rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
-use utils::unsafe_staticref;
+use utils::{unsafe_staticref, unsafe_refmut};
 
 mod auth;
 mod blacklist;
@@ -289,7 +289,7 @@ async fn handle_tcp<S>(
     vless: vless::Vless,
     buff: Vec<u8>,
     size: usize,
-    stream: S,
+    mut stream: S,
     config: &'static config::Config,
 ) -> tokio::io::Result<()>
 where
@@ -339,25 +339,28 @@ where
     if target_addr.port() == 53 || target_addr.port() == 853 {
         tpbs = 8;
     }
+
+    // Reason for using `unsafe_refmut`:
+    // The `try_join!` macro executes tasks concurrently but does not run them in true parallel.
+    // This means the tasks may interleave execution but do not utilize separate cores simultaneously.
+    // Consequently, using `tokio::io::split`, which is designed for safely splitting read/write halves
+    // in parallel execution, is unnecessary in this case.
     match config.tcp_proxy_mod {
         config::TcpProxyMod::Buffer => {
-            let (client_read, mut client_write) = tokio::io::split(stream);
-            let (target_read, mut target_write) = tokio::io::split(target);
-
-            let _ = client_write.write(&[0, 0]).await?;
+            let _ = stream.write(&[0, 0]).await?;
 
             let mut tcpwriter_client = tcp::TcpWriterGeneric {
-                hr: Pin::new(&mut client_write),
+                hr: Pin::new(unsafe_refmut(&stream)),
                 signal: ch_snd.clone(),
             };
 
             let mut tcpwriter_target = tcp::TcpWriterGeneric {
-                hr: Pin::new(&mut target_write),
+                hr: Pin::new(unsafe_refmut(&target)),
                 signal: ch_snd,
             };
 
-            let mut bufwraper_client = tokio::io::BufReader::with_capacity(tpbs*1024, client_read);
-            let mut bufwraper_target = tokio::io::BufReader::with_capacity(tpbs*1024, target_read);
+            let mut bufwraper_client = tokio::io::BufReader::with_capacity(tpbs*1024, unsafe_refmut(&stream));
+            let mut bufwraper_target = tokio::io::BufReader::with_capacity(tpbs*1024, unsafe_refmut(&target));
 
             if let Err(e) = tokio::try_join!(
                 tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target),
@@ -370,24 +373,21 @@ where
             }
         }
         config::TcpProxyMod::Stack => {
-            let (client_read, mut client_write) = tokio::io::split(stream);
-            let (target_read, mut target_write) = tokio::io::split(target);
-
-            let _ = client_write.write(&[0, 0]).await?;
+            let _ = stream.write(&[0, 0]).await?;
 
             let mut tcpwriter_client = tcp::TcpWriterGeneric {
-                hr: Pin::new(&mut client_write),
+                hr: Pin::new(unsafe_refmut(&stream)),
                 signal: ch_snd.clone(),
             };
 
             let mut tcpwriter_target = tcp::TcpWriterGeneric {
-                hr: Pin::new(&mut target_write),
+                hr: Pin::new(unsafe_refmut(&target)),
                 signal: ch_snd,
             };
 
             if let Err(e) = tokio::try_join!(
-                pipe::stack_copy(client_read, &mut tcpwriter_target, tpbs),
-                pipe::stack_copy(target_read, &mut tcpwriter_client, tpbs),
+                pipe::stack_copy(unsafe_refmut(&stream), &mut tcpwriter_target, tpbs),
+                pipe::stack_copy(unsafe_refmut(&target), &mut tcpwriter_client, tpbs),
                 timeout_handler,
             ) {
                 let _ = tcpwriter_target.shutdown().await;
@@ -403,7 +403,7 @@ async fn handle_udp<S>(
     vless: vless::Vless,
     buff: Vec<u8>,
     size: usize,
-    stream: S,
+    mut stream: S,
     config: &'static config::Config,
 ) -> tokio::io::Result<()>
 where
@@ -468,13 +468,12 @@ where
     };
 
     // proxy UDP
-    let (client_read, mut client_write) = tokio::io::split(stream);
     if let Err(e) = tokio::try_join!(
         timeout_handler,
-        udputils::copy_t2u(&udp, client_read, ch_snd.clone(), buf_size),
-        udputils::copy_u2t(&udp, &mut client_write, ch_snd)
+        udputils::copy_t2u(&udp, unsafe_refmut(&stream), ch_snd.clone(), buf_size),
+        udputils::copy_u2t(&udp, unsafe_refmut(&stream), ch_snd)
     ) {
-        let _ = client_write.shutdown().await;
+        let _ = stream.shutdown().await;
         return Err(e);
     };
 
