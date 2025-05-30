@@ -11,11 +11,9 @@ use tokio::{
 };
 
 use crate::{
-    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_staticref},
+    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_refmut, unsafe_staticref},
     verror::VError,
 };
-
-//TODO: Implement unsafe_refmut
 
 // 0, 20, 0, 0, 1, 1, 2, 75, 102, 1, 74, 125, 250, 129, 176, 58, 211, 123, 232, 80, 69, 83, 0, 20, 0, 1, 0, 0, 33, 18, 164, 66, 112, 85, 120, 115, 112, 54, 113, 105, 113, 48, 70, 72
 // |__|   |__|  |  |  |  |____|   |  |______________|    |______________________________|   |___|  |________________________________________________________________________________|
@@ -76,7 +74,7 @@ async fn parse_target(
 
 #[inline(never)]
 pub async fn xudp<S>(
-    stream: S,
+    mut stream: S,
     mut buffer: Vec<u8>,
     resolver: &'static hickory_resolver::Resolver<
         hickory_resolver::name_server::GenericConnector<
@@ -123,7 +121,6 @@ where
         ))
     };
     // tcp idle controller
-    let (client_read, mut client_write) = tokio::io::split(stream);
     let udp = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     let domain_map: RefCell<HashMap<IpAddr, String>> = RefCell::new(HashMap::new());
 
@@ -131,7 +128,7 @@ where
         timeout_handler,
         copy_t2u(
             &udp,
-            client_read,
+            unsafe_refmut(&stream),
             buffer,
             ch_snd.clone(),
             domain_map.clone(),
@@ -139,9 +136,9 @@ where
             resolver,
             blacklist
         ),
-        copy_u2t(&udp, &mut client_write, ch_snd, domain_map.clone())
+        copy_u2t(&udp, unsafe_refmut(&stream), ch_snd, domain_map.clone())
     ) {
-        let _ = client_write.shutdown().await;
+        let _ = stream.shutdown().await;
         return Err(e);
     };
 
@@ -151,7 +148,7 @@ where
 #[inline(always)]
 pub async fn copy_u2t<W>(
     udp: &tokio::net::UdpSocket,
-    w: &mut tokio::io::WriteHalf<W>,
+    w: &mut W,
     ch_snd: tokio::sync::mpsc::Sender<()>,
     domain_map: RefCell<HashMap<IpAddr, String>>,
 ) -> tokio::io::Result<()>
@@ -209,7 +206,7 @@ where
 #[inline(always)]
 pub async fn copy_t2u<R>(
     udp: &tokio::net::UdpSocket,
-    mut r: tokio::io::ReadHalf<R>,
+    mut r: R,
     b0: Vec<u8>,
     ch_snd: tokio::sync::mpsc::Sender<()>,
     domain_map: RefCell<HashMap<IpAddr, String>>,
@@ -241,7 +238,7 @@ where
 
 #[inline(always)]
 async fn handle_xudp_packets<R>(
-    mut r: Pin<&mut tokio::io::ReadHalf<R>>,
+    mut r: Pin<&mut R>,
     udp: &tokio::net::UdpSocket,
     ch_snd: tokio::sync::mpsc::Sender<()>,
     mut internal_buf: Vec<u8>,

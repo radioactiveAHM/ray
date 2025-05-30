@@ -285,6 +285,7 @@ where
     Ok(())
 }
 
+#[inline(never)]
 async fn handle_tcp<S>(
     vless: vless::Vless,
     buff: Vec<u8>,
@@ -399,6 +400,7 @@ where
     Ok(())
 }
 
+#[inline(never)]
 async fn handle_udp<S>(
     vless: vless::Vless,
     buff: Vec<u8>,
