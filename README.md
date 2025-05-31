@@ -95,6 +95,18 @@ HttpUpgrade
     }
 ```
 
+WS
+
+```json
+    "transporter": {
+        "WS": {
+            "path": "/",
+            "host": "meow.com", // If set null any host will be accepted
+            "method": "GET" // For WS method is ignored
+        }
+    }
+```
+
 ## Blacklist Configuration
 
 ```json

@@ -38,6 +38,7 @@ pub enum Transporter {
     TCP,
     HTTP(Http),
     HttpUpgrade(Http),
+    WS(Http)
 }
 
 #[derive(serde::Deserialize)]

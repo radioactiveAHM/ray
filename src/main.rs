@@ -231,17 +231,20 @@ async fn stream_handler<S>(
 where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
+
     let mut buff: Vec<u8> = vec![0; 1024 * 8];
-    let mut size = stream.read(&mut buff).await?;
+    let mut size = 0;
 
     // Handle transporters
     match &config.transporter {
         config::Transporter::TCP => (),
         config::Transporter::HttpUpgrade(http) => {
+            size = stream.read(&mut buff).await?;
             transporters::httpupgrade_transporter(http, &buff[..size], &mut stream).await?;
             size = stream.read(&mut buff).await?;
         }
         config::Transporter::HTTP(http) => {
+            size = stream.read(&mut buff).await?;
             if let Some(p) = utils::catch_in_buff(b"\r\n\r\n", &buff) {
                 let head = &buff[..p.1];
                 transporters::http_transporter(http, head, &mut stream).await?;
@@ -251,23 +254,46 @@ where
                 return Err(crate::verror::VError::TransporterError.into());
             }
         }
+        config::Transporter::WS(http) => {
+            drop(buff);
+            if let Ok((req, ws)) = tokio_websockets::ServerBuilder::new().accept(stream).await {
+                // HTTP path match
+                if req.uri().path()!=http.path {
+                    return Err(verror::VError::TransporterError.into());
+                }
+                // HTTP Host match if Host is not null
+                if let Some(host) = &http.host {
+                    if let Some(req_host) = req.headers().get("Host") {
+                        if host.as_bytes() != req_host.as_bytes() {
+                            return Err(verror::VError::TransporterError.into());
+                        }
+                    } else {
+                        return Err(verror::VError::TransporterError.into());
+                    }
+                }
+                return transporters::websocket_transport(ws, config, resolver, peer_addr).await;
+            } else {
+                return Err(verror::VError::TransporterError.into());
+            }
+        }
     }
 
-    let mut vless = vless::Vless::new(&buff[..size], resolver, &config.blacklist).await?;
+    let vless = vless::Vless::new(&buff[..size], resolver, &config.blacklist).await?;
     if auth::authenticate(config, &vless, peer_addr) {
         return Err(verror::VError::AuthenticationFailed.into());
     }
 
+    let payload = buff[..size].to_vec();
+    drop(buff);
     if let Err(e) = match vless.rt {
-        vless::SocketType::TCP => handle_tcp(vless, buff, size, stream, config).await,
+        vless::SocketType::TCP => handle_tcp(vless, payload, stream, config).await,
         vless::SocketType::UDP => {
-            vless.target.as_mut().unwrap().1 += 2;
-            handle_udp(vless, buff, size, stream, config).await
+            handle_udp(vless, payload, stream, config).await
         }
         vless::SocketType::MUX => {
             mux::xudp(
                 stream,
-                buff[..size].to_vec(),
+                payload,
                 resolver,
                 &config.blacklist,
                 config.udp_proxy_buffer_size.unwrap_or(8),
@@ -288,8 +314,7 @@ where
 #[inline(never)]
 async fn handle_tcp<S>(
     vless: vless::Vless,
-    buff: Vec<u8>,
-    size: usize,
+    payload: Vec<u8>,
     mut stream: S,
     config: &'static config::Config,
 ) -> tokio::io::Result<()>
@@ -299,9 +324,10 @@ where
     let (target_addr, body) = vless.target.as_ref().unwrap();
     let mut target = tcp::stream(*target_addr).await?;
 
-    let _ = target.write(&buff[*body..size]).await?;
-    target.flush().await?;
-    drop(buff);
+    if !&payload[*body..].is_empty(){
+        let _ = target.write(&payload[*body..]).await?;
+    }
+    drop(payload);
 
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
     let stream_ghost = unsafe_staticref(&stream);
@@ -403,8 +429,7 @@ where
 #[inline(never)]
 async fn handle_udp<S>(
     vless: vless::Vless,
-    buff: Vec<u8>,
-    size: usize,
+    payload: Vec<u8>,
     mut stream: S,
     config: &'static config::Config,
 ) -> tokio::io::Result<()>
@@ -424,12 +449,11 @@ where
     let udp = tokio::net::UdpSocket::bind(addrtype).await?;
     udp.connect(target).await?;
 
-    if *body <= size {
-        if !&buff[*body..size].is_empty() {
-            udp.send(&buff[*body..size]).await?;
-        }
+    // first packet might not be complete
+    if !&payload[*body..].is_empty(){
+        udp.send(&payload[*body+2..]).await?;
     }
-    drop(buff);
+    drop(payload);
 
     let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
     let stream_ghost = unsafe_staticref(&stream);
