@@ -35,8 +35,7 @@ static mut TSO: config::TcpSocketOptions = config::TcpSocketOptions {
     send_buffer_size: None,
     recv_buffer_size: None,
     nodelay: None,
-    keepalive: None,
-    listen_backlog: 128,
+    keepalive: None
 };
 
 fn log() -> bool {
@@ -144,11 +143,7 @@ async fn async_main(c: config::Config) {
     let mut handles = Vec::new();
     for inbound in &config.inbounds {
         let j = tokio::spawn(async move {
-            let tcp = tcp::tcpsocket(inbound.listen, false)
-                .unwrap()
-                .listen(config.tcp_socket_options.listen_backlog)
-                .unwrap();
-
+            let tcp = tokio::net::TcpListener::bind(inbound.listen).await.unwrap();
             if inbound.tls.enable {
                 // with tls
                 let certs = CertificateDer::pem_file_iter(&inbound.tls.certificate)
@@ -278,15 +273,22 @@ where
                 return Err(crate::verror::VError::TransporterError.into());
             }
         }
-        config::Transporter::WS(http) => {
+        config::Transporter::WS(ws_options) => {
+            let mut ws_c = tokio_websockets::Config::default();
+            if let Some(threshold)  = ws_options.threshold {
+                ws_c = ws_c.flush_threshold(threshold);
+            }
+            if let Some(frame_size) = ws_options.frame_size {
+                ws_c = ws_c.frame_size(frame_size);
+            }
             drop(buff);
-            if let Ok((req, ws)) = tokio_websockets::ServerBuilder::new().accept(stream).await {
+            if let Ok((req, ws)) = tokio_websockets::ServerBuilder::new().config(ws_c).accept(stream).await {
                 // HTTP path match
-                if req.uri().path() != http.path {
+                if req.uri().path() != ws_options.path {
                     return Err(verror::VError::TransporterError.into());
                 }
                 // HTTP Host match if Host is not null
-                if let Some(host) = &http.host {
+                if let Some(host) = &ws_options.host {
                     if let Some(req_host) = req.headers().get("Host") {
                         if host.as_bytes() != req_host.as_bytes() {
                             return Err(verror::VError::TransporterError.into());

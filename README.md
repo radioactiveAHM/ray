@@ -21,7 +21,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 **Notes:**
 
 - Increasing the buffer size for `tcp_proxy_buffer_size` and `udp_proxy_buffer_size` enhances throughput and reduces latency and cpu usage. However, be mindful of memory usage and the number of users if the system runs out of memory, the application will crash.
-- **Stack Proxy Method:** A built-in TCP proxy method that avoids buffering across multiple reads and does not require flushing. Unlike other methods, the buffer is allocated directly on the stack, ensuring efficient memory usage. Stack allocated Buffer sizes are limited to `4`, `8`, `16`, `32`, `64`, `128`, `256`, `512` and `1024` each multiplied by `1024` (e.g., `4` corresponds to `4096` bytes) other sizes allocated on heap.
+- **Stack Proxy Method:** A built-in TCP proxy method that avoids buffering across multiple reads. Unlike other methods, the buffer is allocated directly on the stack, ensuring efficient memory usage. Stack allocated Buffer sizes are limited to `4`, `8`, `16`, `32`, `64`, `128`, `256`, `512` and `1024` each multiplied by `1024` (e.g., `4` corresponds to `4096` bytes) other sizes allocated on heap.
 - When using the Stack Proxy Method with a stack-allocated buffer, there is a risk of exceeding the stack size, leading to a potential crash. To mitigate this, adjust the `thread_stack_size` accordingly.
 
 ```json
@@ -108,7 +108,8 @@ WS
         "WS": {
             "path": "/",
             "host": "meow.com", // If set null any host will be accepted
-            "method": "GET" // For WS method is ignored
+            "threshold": null, // The default is 8 KiB. Unit is bytes.
+            "frame_size": null // Max Outgoing frame size. The default is 4MiB. Unit is bytes.
         }
     }
 ```

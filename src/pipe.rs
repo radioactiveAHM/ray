@@ -135,6 +135,7 @@ where
         })
         .await?;
         let _ = w.write(wrapper.filled()).await?;
+        let _ = w.flush().await;
         wrapper.clear();
     }
 }

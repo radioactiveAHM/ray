@@ -11,8 +11,7 @@ pub struct TcpSocketOptions {
     pub send_buffer_size: Option<u32>,
     pub recv_buffer_size: Option<u32>,
     pub nodelay: Option<bool>,
-    pub keepalive: Option<bool>,
-    pub listen_backlog: u32,
+    pub keepalive: Option<bool>
 }
 
 #[derive(serde::Deserialize)]
@@ -33,12 +32,21 @@ pub struct Http {
 }
 
 #[derive(serde::Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct Ws {
+    pub path: String,
+    pub host: Option<String>,
+    pub threshold: Option<usize>,
+    pub frame_size: Option<usize>
+}
+
+#[derive(serde::Deserialize, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Transporter {
     TCP,
     HTTP(Http),
     HttpUpgrade(Http),
-    WS(Http),
+    WS(Ws),
 }
 
 #[derive(serde::Deserialize)]
