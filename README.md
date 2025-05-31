@@ -33,21 +33,26 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
     "udp_idle_timeout": 90, // UDP idle timeout in seconds
-    "listen": "[::]:80", // Server listening address and port. [::] works for both ipv4 and ipv6 in linux (dual stack).
     "users": [ // User list
         {
             "name": "admin",
             "uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
         }
     ],
-    "transporter": "TCP", // Transport protocol
-    "tls": { // TLS Configuration
-        "enable": false, // Enable tls
-        "max_fragment_size": null, // The maximum size of plaintext input to be emitted in a single TLS record. A value of null is equivalent to the TLS maximum of 16 kB.
-        "alpn": ["h2", "http/1.1"],
-        "certificate": "cert.pem", // Certificate Path
-        "key": "key.pem" // Key Path
-    },
+    "inbounds":[
+        // inbound objects
+        {
+            "listen": "0.0.0.0:80", // Server listening address and port. [::] works for both ipv4 and ipv6 in linux (dual stack).
+            "transporter": "TCP", // Transport protocol
+            "tls": { // TLS Configuration
+                "enable": false, // Enable tls
+                "max_fragment_size": null, // The maximum size of plaintext input to be emitted in a single TLS record. A value of null is equivalent to the TLS maximum of 16 kB.
+                "alpn": ["h2", "http/1.1"],
+                "certificate": "cert.pem", // Certificate Path
+                "key": "key.pem" // Key Path
+            }
+        }
+    ],
     "resolver": { // Built-in domain resolver supporting multiple protocols: udp, https, h3, tls, and quic
         "address": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google"
         "ip_port": "8.8.8.8:53", // Standard port: UDP (53), HTTPS (443), TLS/QUIC (853)

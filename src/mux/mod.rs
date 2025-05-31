@@ -11,7 +11,9 @@ use tokio::{
 };
 
 use crate::{
-    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_refmut, unsafe_staticref},
+    utils::{
+        convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_refmut, unsafe_staticref,
+    },
     verror::VError,
 };
 

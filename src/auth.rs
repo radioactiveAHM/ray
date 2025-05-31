@@ -13,13 +13,12 @@ pub fn authenticate(
                             "User {} connected from {} commanding {} to {}",
                             user.name, userip, vconn.rt, target.0
                         );
-                    }else {
+                    } else {
                         println!(
                             "User {} connected from {} commanding {}",
                             user.name, userip, vconn.rt
                         );
                     }
-                    
                 }
                 return false;
             }

@@ -1,5 +1,5 @@
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures_util::{SinkExt, StreamExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 pub async fn httpupgrade_transporter<S>(
     chttp: &crate::config::Http,
@@ -73,16 +73,21 @@ struct WST<S>(pub tokio_websockets::WebSocketStream<S>)
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static;
 
-impl<S> AsyncRead for WST<S> where S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send {
+impl<S> AsyncRead for WST<S>
+where
+    S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
+{
     fn poll_read(
-            mut self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-            buf: &mut tokio::io::ReadBuf<'_>,
-        ) -> std::task::Poll<std::io::Result<()>> {
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
         match self.0.poll_next_unpin(cx) {
             std::task::Poll::Pending => std::task::Poll::Pending,
             std::task::Poll::Ready(None) => std::task::Poll::Pending,
-            std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
+            std::task::Poll::Ready(Some(Err(e))) => {
+                std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+            }
             std::task::Poll::Ready(Some(Ok(message))) => {
                 buf.put_slice(message.as_payload());
                 std::task::Poll::Ready(Ok(()))
@@ -91,35 +96,51 @@ impl<S> AsyncRead for WST<S> where S: AsyncRead + crate::PeekWraper + AsyncWrite
     }
 }
 
-impl<S> AsyncWrite for WST<S> where S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send {
-    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), std::io::Error>> {
+impl<S> AsyncWrite for WST<S>
+where
+    S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
+{
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
         match self.0.poll_flush_unpin(cx) {
             std::task::Poll::Pending => std::task::Poll::Pending,
             std::task::Poll::Ready(Ok(_)) => std::task::Poll::Ready(Ok(())),
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+            std::task::Poll::Ready(Err(e)) => {
+                std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+            }
         }
     }
-    fn poll_shutdown(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), std::io::Error>> {
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
         match self.0.poll_close_unpin(cx) {
             std::task::Poll::Pending => std::task::Poll::Pending,
             std::task::Poll::Ready(Ok(_)) => std::task::Poll::Ready(Ok(())),
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+            std::task::Poll::Ready(Err(e)) => {
+                std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+            }
         }
     }
     fn poll_write(
-            mut self: std::pin::Pin<&mut Self>,
-            _cx: &mut std::task::Context<'_>,
-            buf: &[u8],
-        ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
         let bin_message = tokio_websockets::Message::binary(bytes::Bytes::copy_from_slice(buf));
         match self.0.start_send_unpin(bin_message) {
             Ok(_) => std::task::Poll::Ready(Ok(buf.len())),
-            Err(e) => std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+            Err(e) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
         }
     }
 }
 
-impl<S> crate::PeekWraper for WST<S> where S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send {
+impl<S> crate::PeekWraper for WST<S>
+where
+    S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
+{
     async fn peek(&self) -> tokio::io::Result<()> {
         self.0.get_ref().peek().await
     }
@@ -159,9 +180,7 @@ where
     let wst = WST(ws);
     if let Err(e) = match vless.rt {
         crate::vless::SocketType::TCP => crate::handle_tcp(vless, payload, wst, config).await,
-        crate::vless::SocketType::UDP => {
-            crate::handle_udp(vless, payload, wst, config).await
-        }
+        crate::vless::SocketType::UDP => crate::handle_udp(vless, payload, wst, config).await,
         crate::vless::SocketType::MUX => {
             crate::mux::xudp(
                 wst,

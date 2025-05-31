@@ -24,7 +24,7 @@ pub struct Tls {
     pub key: String,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 #[allow(dead_code)]
 pub struct Http {
     pub path: String,
@@ -32,13 +32,13 @@ pub struct Http {
     pub host: Option<String>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Transporter {
     TCP,
     HTTP(Http),
     HttpUpgrade(Http),
-    WS(Http)
+    WS(Http),
 }
 
 #[derive(serde::Deserialize)]
@@ -68,6 +68,13 @@ pub enum TcpProxyMod {
 }
 
 #[derive(serde::Deserialize)]
+pub struct Inbound {
+    pub listen: SocketAddr,
+    pub transporter: Transporter,
+    pub tls: Tls,
+}
+
+#[derive(serde::Deserialize)]
 pub struct Config {
     pub log: bool,
     pub thread_stack_size: Option<usize>,
@@ -76,10 +83,8 @@ pub struct Config {
     pub udp_proxy_buffer_size: Option<usize>,
     pub tcp_idle_timeout: u64,
     pub udp_idle_timeout: u64,
-    pub listen: SocketAddr,
     pub users: Vec<User>,
-    pub transporter: Transporter,
-    pub tls: Tls,
+    pub inbounds: Vec<Inbound>,
     pub resolver: Resolver,
     pub tcp_socket_options: TcpSocketOptions,
     pub blacklist: Option<Vec<BlackList>>,

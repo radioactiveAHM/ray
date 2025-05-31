@@ -6,21 +6,25 @@
     "udp_proxy_buffer_size": null,
     "tcp_idle_timeout": 150,
     "udp_idle_timeout": 90,
-    "listen": "0.0.0.0:80",
     "users": [
         {
             "name": "admin",
             "uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
         }
     ],
-    "transporter": "TCP",
-    "tls": {
-        "enable": false,
-        "max_fragment_size": null,
-        "alpn": ["h2", "http/1.1"],
-        "certificate": "cert.pem",
-        "key": "key.pem"
-    },
+    "inbounds": [
+        {
+            "listen": "0.0.0.0:80",
+            "transporter": "TCP",
+            "tls": {
+                "enable": false,
+                "max_fragment_size": null,
+                "alpn": ["h2", "http/1.1"],
+                "certificate": "cert.pem",
+                "key": "key.pem"
+            }
+        }
+    ],
     "resolver": {
         "address": null,
         "ip_port": "8.8.8.8:53",

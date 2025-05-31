@@ -12,7 +12,7 @@ use tokio_rustls::{
     TlsAcceptor,
     rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
-use utils::{unsafe_staticref, unsafe_refmut};
+use utils::{unsafe_refmut, unsafe_staticref};
 
 mod auth;
 mod blacklist;
@@ -141,65 +141,86 @@ async fn async_main(c: config::Config) {
         TSO = config.tcp_socket_options
     }
 
-    let tcp = tcp::tcpsocket(config.listen, false)
-        .unwrap()
-        .listen(config.tcp_socket_options.listen_backlog)
-        .unwrap();
-
-    if config.tls.enable {
-        // with tls
-        let certs = CertificateDer::pem_file_iter(&config.tls.certificate)
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        let key = PrivateKeyDer::from_pem_file(&config.tls.key).unwrap();
-        let mut c: tokio_rustls::rustls::ServerConfig =
-            tokio_rustls::rustls::ServerConfig::builder()
-                .with_no_client_auth()
-                .with_single_cert(certs, key)
+    let mut handles = Vec::new();
+    for inbound in &config.inbounds {
+        let j = tokio::spawn(async move {
+            let tcp = tcp::tcpsocket(inbound.listen, false)
+                .unwrap()
+                .listen(config.tcp_socket_options.listen_backlog)
                 .unwrap();
-        c.alpn_protocols = config
-            .tls
-            .alpn
-            .iter()
-            .map(|p| p.as_bytes().to_vec())
-            .collect();
-        c.max_fragment_size = config.tls.max_fragment_size;
-        let acceptor = TlsAcceptor::from(Arc::new(c));
 
-        loop {
-            match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
-                Ok(tc) => {
-                    tokio::spawn(async move {
-                        if let Err(e) = tls_handler(tc, config, cresolver).await {
+            if inbound.tls.enable {
+                // with tls
+                let certs = CertificateDer::pem_file_iter(&inbound.tls.certificate)
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                let key = PrivateKeyDer::from_pem_file(&inbound.tls.key).unwrap();
+                let mut c: tokio_rustls::rustls::ServerConfig =
+                    tokio_rustls::rustls::ServerConfig::builder()
+                        .with_no_client_auth()
+                        .with_single_cert(certs, key)
+                        .unwrap();
+                c.alpn_protocols = inbound
+                    .tls
+                    .alpn
+                    .iter()
+                    .map(|p| p.as_bytes().to_vec())
+                    .collect();
+                c.max_fragment_size = inbound.tls.max_fragment_size;
+                let acceptor = TlsAcceptor::from(Arc::new(c));
+
+                loop {
+                    match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
+                        Ok(tc) => {
+                            tokio::spawn(async move {
+                                if let Err(e) =
+                                    tls_handler(tc, config, cresolver, inbound.transporter.clone())
+                                        .await
+                                {
+                                    if log() {
+                                        println!("TLS: {e}")
+                                    }
+                                }
+                            });
+                        }
+                        Err(e) => {
                             if log() {
                                 println!("TLS: {e}")
                             }
                         }
-                    });
-                }
-                Err(e) => {
-                    if log() {
-                        println!("TLS: {e}")
                     }
                 }
-            }
-        }
-    } else {
-        // no tls
-        loop {
-            if let Ok((stream, _)) = tcp.accept().await {
-                tokio::spawn(async move {
-                    if let Ok(peer_addr) = stream.peer_addr() {
-                        if let Err(e) = stream_handler(stream, config, peer_addr, cresolver).await {
-                            if log() {
-                                println!("NOTLS: {e}");
+            } else {
+                // no tls
+                loop {
+                    if let Ok((stream, _)) = tcp.accept().await {
+                        tokio::spawn(async move {
+                            if let Ok(peer_addr) = stream.peer_addr() {
+                                if let Err(e) = stream_handler(
+                                    stream,
+                                    config,
+                                    peer_addr,
+                                    cresolver,
+                                    inbound.transporter.clone(),
+                                )
+                                .await
+                                {
+                                    if log() {
+                                        println!("NOTLS: {e}");
+                                    }
+                                }
                             }
-                        }
+                        });
                     }
-                });
+                }
             }
-        }
+        });
+        handles.push(j);
+    }
+
+    for h in handles {
+        h.await.expect("One of Inbound tasks paniced");
     }
 }
 
@@ -211,11 +232,12 @@ async fn tls_handler(
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
     >,
+    transport: config::Transporter,
 ) -> tokio::io::Result<()> {
     let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
     let stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream> = tc.accept().await?;
 
-    stream_handler(stream, config, peer_addr, resolver).await
+    stream_handler(stream, config, peer_addr, resolver, transport).await
 }
 
 async fn stream_handler<S>(
@@ -227,17 +249,19 @@ async fn stream_handler<S>(
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
     >,
+    transport: config::Transporter,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
-
     let mut buff: Vec<u8> = vec![0; 1024 * 8];
-    let mut size = 0;
+    let mut size;
 
     // Handle transporters
-    match &config.transporter {
-        config::Transporter::TCP => (),
+    match &transport {
+        config::Transporter::TCP => {
+            size = stream.read(&mut buff).await?;
+        }
         config::Transporter::HttpUpgrade(http) => {
             size = stream.read(&mut buff).await?;
             transporters::httpupgrade_transporter(http, &buff[..size], &mut stream).await?;
@@ -258,7 +282,7 @@ where
             drop(buff);
             if let Ok((req, ws)) = tokio_websockets::ServerBuilder::new().accept(stream).await {
                 // HTTP path match
-                if req.uri().path()!=http.path {
+                if req.uri().path() != http.path {
                     return Err(verror::VError::TransporterError.into());
                 }
                 // HTTP Host match if Host is not null
@@ -287,9 +311,7 @@ where
     drop(buff);
     if let Err(e) = match vless.rt {
         vless::SocketType::TCP => handle_tcp(vless, payload, stream, config).await,
-        vless::SocketType::UDP => {
-            handle_udp(vless, payload, stream, config).await
-        }
+        vless::SocketType::UDP => handle_udp(vless, payload, stream, config).await,
         vless::SocketType::MUX => {
             mux::xudp(
                 stream,
@@ -324,7 +346,7 @@ where
     let (target_addr, body) = vless.target.as_ref().unwrap();
     let mut target = tcp::stream(*target_addr).await?;
 
-    if !&payload[*body..].is_empty(){
+    if !&payload[*body..].is_empty() {
         let _ = target.write(&payload[*body..]).await?;
     }
     drop(payload);
@@ -386,8 +408,10 @@ where
                 signal: ch_snd,
             };
 
-            let mut bufwraper_client = tokio::io::BufReader::with_capacity(tpbs*1024, unsafe_refmut(&stream));
-            let mut bufwraper_target = tokio::io::BufReader::with_capacity(tpbs*1024, unsafe_refmut(&target));
+            let mut bufwraper_client =
+                tokio::io::BufReader::with_capacity(tpbs * 1024, unsafe_refmut(&stream));
+            let mut bufwraper_target =
+                tokio::io::BufReader::with_capacity(tpbs * 1024, unsafe_refmut(&target));
 
             if let Err(e) = tokio::try_join!(
                 tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target),
@@ -450,8 +474,8 @@ where
     udp.connect(target).await?;
 
     // first packet might not be complete
-    if !&payload[*body..].is_empty(){
-        udp.send(&payload[*body+2..]).await?;
+    if !&payload[*body..].is_empty() {
+        udp.send(&payload[*body + 2..]).await?;
     }
     drop(payload);
 
