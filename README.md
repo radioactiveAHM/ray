@@ -6,6 +6,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 
 - [x] HTTP
 - [x] HTTP Upgrade
+- [x] WS (WebSocket)
 - [ ] XHTTP (Packet-up H2)
 - [ ] XHTTP (Packet-up HTTP/1.1)
 
