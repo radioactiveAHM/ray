@@ -131,7 +131,7 @@ where
 {
     let mut uw = UdpWriter {
         udp,
-        b: Vec::with_capacity(buf_size),
+        b: Vec::with_capacity(buf_size * 1024), // buf_size unit is kb
         ch_snd,
     };
 

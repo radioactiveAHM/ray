@@ -530,7 +530,7 @@ where
             &udp,
             unsafe_refmut(&stream),
             ch_snd.clone(),
-            buf_size * 1024
+            buf_size
         ),
         udputils::copy_u2t(&udp, unsafe_refmut(&stream), ch_snd)
     ) {

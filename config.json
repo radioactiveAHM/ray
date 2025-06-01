@@ -34,8 +34,7 @@
         "send_buffer_size": null,
         "recv_buffer_size": null,
         "nodelay": null,
-        "keepalive": null,
-        "listen_backlog": 128
+        "keepalive": null
     },
     "blacklist": null
 }
