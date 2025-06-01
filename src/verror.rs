@@ -19,6 +19,7 @@ pub enum VError {
     UdpDeadLoop,
     MailFormedUdpPacket,
     DomainInBlacklist,
+    WsClosed,
 }
 impl Display for VError {
     #[cold]
@@ -41,6 +42,7 @@ impl Display for VError {
             VError::YameteKudasai => write!(f, "YameteKudasai"),
             VError::BufferOverflow => write!(f, "BufferOverflow"),
             VError::DomainInBlacklist => write!(f, "Domain In Blacklist"),
+            VError::WsClosed => write!(f, "WS Close Frame Received"),
         }
     }
 }

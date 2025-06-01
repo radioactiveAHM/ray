@@ -35,7 +35,7 @@ static mut TSO: config::TcpSocketOptions = config::TcpSocketOptions {
     send_buffer_size: None,
     recv_buffer_size: None,
     nodelay: None,
-    keepalive: None
+    keepalive: None,
 };
 
 fn log() -> bool {
@@ -275,14 +275,18 @@ where
         }
         config::Transporter::WS(ws_options) => {
             let mut ws_c = tokio_websockets::Config::default();
-            if let Some(threshold)  = ws_options.threshold {
-                ws_c = ws_c.flush_threshold(threshold);
+            if let Some(threshold) = ws_options.threshold {
+                ws_c = ws_c.flush_threshold(threshold * 1024);
             }
             if let Some(frame_size) = ws_options.frame_size {
-                ws_c = ws_c.frame_size(frame_size);
+                ws_c = ws_c.frame_size(frame_size * 1024);
             }
             drop(buff);
-            if let Ok((req, ws)) = tokio_websockets::ServerBuilder::new().config(ws_c).accept(stream).await {
+            if let Ok((req, ws)) = tokio_websockets::ServerBuilder::new()
+                .config(ws_c)
+                .accept(stream)
+                .await
+            {
                 // HTTP path match
                 if req.uri().path() != ws_options.path {
                     return Err(verror::VError::TransporterError.into());
@@ -522,7 +526,12 @@ where
     // proxy UDP
     if let Err(e) = tokio::try_join!(
         timeout_handler,
-        udputils::copy_t2u(&udp, unsafe_refmut(&stream), ch_snd.clone(), buf_size),
+        udputils::copy_t2u(
+            &udp,
+            unsafe_refmut(&stream),
+            ch_snd.clone(),
+            buf_size * 1024
+        ),
         udputils::copy_u2t(&udp, unsafe_refmut(&stream), ch_snd)
     ) {
         let _ = stream.shutdown().await;

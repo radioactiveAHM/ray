@@ -108,8 +108,8 @@ WS
         "WS": {
             "path": "/",
             "host": "meow.com", // If set null any host will be accepted
-            "threshold": null, // The default is 8 KiB. Unit is bytes.
-            "frame_size": null // Max Outgoing frame size. The default is 4MiB. Unit is bytes.
+            "threshold": null, // The default is 8 KiB. Unit is Kb. !!! It's better to set the value same as tcp_proxy_buffer_size.
+            "frame_size": null // Max Outgoing frame size. The default is 4MiB. Unit is Kb.
         }
     }
 ```

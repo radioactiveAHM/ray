@@ -11,7 +11,7 @@ pub struct TcpSocketOptions {
     pub send_buffer_size: Option<u32>,
     pub recv_buffer_size: Option<u32>,
     pub nodelay: Option<bool>,
-    pub keepalive: Option<bool>
+    pub keepalive: Option<bool>,
 }
 
 #[derive(serde::Deserialize)]
@@ -37,7 +37,7 @@ pub struct Ws {
     pub path: String,
     pub host: Option<String>,
     pub threshold: Option<usize>,
-    pub frame_size: Option<usize>
+    pub frame_size: Option<usize>,
 }
 
 #[derive(serde::Deserialize, Clone)]
