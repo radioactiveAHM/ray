@@ -13,6 +13,7 @@ hickory-resolver = { version = "0.25", features = ["https-ring", "h3-ring", "qui
 tokio-websockets = { version = "0.11.4", features = ["server", "sha1_smol"] }
 futures-util = "0.3.31"
 bytes = "1.10.1"
+local-ip-address = "0.6.5"
 
 
 [profile.release]

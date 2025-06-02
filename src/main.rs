@@ -1,5 +1,5 @@
 use std::{
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     pin::Pin,
     sync::Arc,
 };
@@ -170,7 +170,7 @@ async fn async_main(c: config::Config) {
                         Ok(tc) => {
                             tokio::spawn(async move {
                                 if let Err(e) =
-                                    tls_handler(tc, config, cresolver, inbound.transporter.clone())
+                                    tls_handler(tc, config, cresolver, inbound.transporter.clone(), inbound.interface.clone())
                                         .await
                                 {
                                     if log() {
@@ -198,6 +198,7 @@ async fn async_main(c: config::Config) {
                                     peer_addr,
                                     cresolver,
                                     inbound.transporter.clone(),
+                                    inbound.interface.clone()
                                 )
                                 .await
                                 {
@@ -228,11 +229,12 @@ async fn tls_handler(
         >,
     >,
     transport: config::Transporter,
+    interface: Option<String>
 ) -> tokio::io::Result<()> {
     let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
     let stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream> = tc.accept().await?;
 
-    stream_handler(stream, config, peer_addr, resolver, transport).await
+    stream_handler(stream, config, peer_addr, resolver, transport, interface).await
 }
 
 async fn stream_handler<S>(
@@ -245,6 +247,7 @@ async fn stream_handler<S>(
         >,
     >,
     transport: config::Transporter,
+    interface: Option<String>
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
@@ -301,7 +304,7 @@ where
                         return Err(verror::VError::TransporterError.into());
                     }
                 }
-                return transporters::websocket_transport(ws, config, resolver, peer_addr).await;
+                return transporters::websocket_transport(ws, config, resolver, peer_addr, interface).await;
             } else {
                 return Err(verror::VError::TransporterError.into());
             }
@@ -316,8 +319,8 @@ where
     let payload = buff[..size].to_vec();
     drop(buff);
     if let Err(e) = match vless.rt {
-        vless::SocketType::TCP => handle_tcp(vless, payload, stream, config).await,
-        vless::SocketType::UDP => handle_udp(vless, payload, stream, config).await,
+        vless::SocketType::TCP => handle_tcp(vless, payload, stream, config, interface).await,
+        vless::SocketType::UDP => handle_udp(vless, payload, stream, config, interface).await,
         vless::SocketType::MUX => {
             mux::xudp(
                 stream,
@@ -325,6 +328,8 @@ where
                 resolver,
                 &config.blacklist,
                 config.udp_proxy_buffer_size.unwrap_or(8),
+                interface,
+                peer_addr.ip()
             )
             .await
         }
@@ -345,12 +350,13 @@ async fn handle_tcp<S>(
     payload: Vec<u8>,
     mut stream: S,
     config: &'static config::Config,
+    interface: Option<String>
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
     let (target_addr, body) = vless.target.as_ref().unwrap();
-    let mut target = tcp::stream(*target_addr).await?;
+    let mut target = tcp::stream(*target_addr, interface).await?;
 
     if !&payload[*body..].is_empty() {
         let _ = target.write(&payload[*body..]).await?;
@@ -462,21 +468,22 @@ async fn handle_udp<S>(
     payload: Vec<u8>,
     mut stream: S,
     config: &'static config::Config,
+    interface: Option<String>
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
     let (target, body) = vless.target.as_ref().unwrap();
-    let addrtype = {
+    let ip = if let Some(interface) = interface {
+        tcp::get_interface(target.is_ipv4(), interface)
+    } else {
         if target.is_ipv4() {
-            SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
-        } else if target.is_ipv6() {
-            SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0))
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
         } else {
-            return Err(tokio::io::Error::other(verror::VError::Wtf));
+            IpAddr::V6(Ipv6Addr::UNSPECIFIED)
         }
     };
-    let udp = tokio::net::UdpSocket::bind(addrtype).await?;
+    let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
     udp.connect(target).await?;
 
     // first packet might not be complete

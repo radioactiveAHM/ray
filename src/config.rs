@@ -80,6 +80,7 @@ pub struct Inbound {
     pub listen: SocketAddr,
     pub transporter: Transporter,
     pub tls: Tls,
+    pub interface: Option<String>
 }
 
 #[derive(serde::Deserialize)]

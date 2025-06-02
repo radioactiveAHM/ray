@@ -174,6 +174,7 @@ pub async fn websocket_transport<S>(
         >,
     >,
     peer_addr: std::net::SocketAddr,
+    interface: Option<String>
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static,
@@ -197,8 +198,8 @@ where
 
     let wst = WST { ws, closed: false };
     if let Err(e) = match vless.rt {
-        crate::vless::SocketType::TCP => crate::handle_tcp(vless, payload, wst, config).await,
-        crate::vless::SocketType::UDP => crate::handle_udp(vless, payload, wst, config).await,
+        crate::vless::SocketType::TCP => crate::handle_tcp(vless, payload, wst, config, interface).await,
+        crate::vless::SocketType::UDP => crate::handle_udp(vless, payload, wst, config, interface).await,
         crate::vless::SocketType::MUX => {
             crate::mux::xudp(
                 wst,
@@ -206,6 +207,8 @@ where
                 resolver,
                 &config.blacklist,
                 config.udp_proxy_buffer_size.unwrap_or(8),
+                interface,
+                peer_addr.ip()
             )
             .await
         }

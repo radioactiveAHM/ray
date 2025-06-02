@@ -50,7 +50,8 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
                 "alpn": ["h2", "http/1.1"],
                 "certificate": "cert.pem", // Certificate Path
                 "key": "key.pem" // Key Path
-            }
+            },
+            "interface": null // Bind interface/Adaptor
         }
     ],
     "resolver": { // Built-in domain resolver supporting multiple protocols: udp, https, h3, tls, and quic

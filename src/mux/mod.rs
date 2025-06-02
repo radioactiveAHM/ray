@@ -85,6 +85,8 @@ pub async fn xudp<S>(
     >,
     blacklist: &Option<Vec<crate::config::BlackList>>,
     buf_size: usize,
+    interface: Option<String>,
+    peer_ip: IpAddr 
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static,
@@ -122,8 +124,17 @@ where
             "Connection idle timeout",
         ))
     };
-    // tcp idle controller
-    let udp = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
+    
+    let ip = if let Some(interface) = interface {
+        crate::tcp::get_interface(peer_ip.is_ipv4(), interface)
+    } else {
+        if peer_ip.is_ipv4() {
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+        } else {
+            IpAddr::V6(Ipv6Addr::UNSPECIFIED)
+        }
+    };
+    let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
     let domain_map: RefCell<HashMap<IpAddr, String>> = RefCell::new(HashMap::new());
 
     if let Err(e) = tokio::try_join!(

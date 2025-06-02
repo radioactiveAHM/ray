@@ -1,5 +1,5 @@
 {
-    "log": false,
+    "log": true,
     "thread_stack_size": null,
     "tcp_proxy_mod": "Stack",
     "tcp_proxy_buffer_size": null,
@@ -22,7 +22,8 @@
                 "alpn": ["h2", "http/1.1"],
                 "certificate": "cert.pem",
                 "key": "key.pem"
-            }
+            },
+            "interface": null
         }
     ],
     "resolver": {
