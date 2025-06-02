@@ -1,6 +1,6 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    pin::Pin,
+    pin::Pin, str::FromStr,
 };
 
 use tokio::net::{TcpSocket, TcpStream};
@@ -97,6 +97,10 @@ pub async fn stream(a: SocketAddr, interface: Option<String>) -> tokio::io::Resu
 
 #[inline(always)]
 pub fn get_interface(ipv4: bool, interface: String) -> IpAddr {
+    // if user input ip as interface
+    if let Ok(ip) = IpAddr::from_str(&interface) {
+        return ip;
+    }
     // Cause panic if it fails, informing the user that the binding interface is not available.
     let interfaces =
         local_ip_address::list_afinet_netifas().expect("binding interface is not available");
