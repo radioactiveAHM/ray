@@ -75,12 +75,21 @@ pub enum TcpProxyMod {
     Stack,
 }
 
+#[derive(serde::Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct SockOpt{
+    pub interface: Option<String>,
+    pub bind_to_device: bool,
+    pub mss: Option<i32>,
+    pub congestion: Option<String>
+}
+
 #[derive(serde::Deserialize)]
 pub struct Inbound {
     pub listen: SocketAddr,
     pub transporter: Transporter,
     pub tls: Tls,
-    pub interface: Option<String>
+    pub sockopt: SockOpt
 }
 
 #[derive(serde::Deserialize)]

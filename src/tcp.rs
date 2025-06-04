@@ -38,12 +38,34 @@ where
 }
 
 #[inline(always)]
-pub fn tcpsocket(a: SocketAddr, minimize: bool) -> tokio::io::Result<TcpSocket> {
-    let socket = if a.is_ipv4() {
+#[allow(unused_variables)]
+pub fn tcpsocket(a: SocketAddr, minimize: bool, sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpSocket> {
+    let socket: TcpSocket = if a.is_ipv4() {
         tokio::net::TcpSocket::new_v4()?
     } else {
         tokio::net::TcpSocket::new_v6()?
     };
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(mss) = sockopt.mss {
+            if tcp_options::set_tcp_mss(&socket, mss).is_err() && crate::log(){
+                println!("Failed to set tcp mss");
+            };
+        }
+        if let Some(congestion) = &sockopt.congestion {
+            if tcp_options::set_tcp_congestion(&socket, congestion).is_err() && crate::log(){
+                println!("Failed to set tcp congestion");
+            };
+        }
+        if sockopt.bind_to_device {
+            if let Some(interface) = &sockopt.interface {
+                if tcp_options::set_tcp_bind_device(&socket, &interface).is_err() && crate::log(){
+                    println!("Failed to set bind to device");
+                };
+            }
+        }
+    }
 
     if minimize {
         // useful if socket is used for dns.
@@ -76,8 +98,8 @@ pub fn tcpsocket(a: SocketAddr, minimize: bool) -> tokio::io::Result<TcpSocket> 
 }
 
 #[inline(always)]
-pub async fn stream(a: SocketAddr, interface: Option<String>) -> tokio::io::Result<TcpStream> {
-    let ip = if let Some(interface) = interface {
+pub async fn stream(a: SocketAddr, sockopt: crate::config::SockOpt) -> tokio::io::Result<TcpStream> {
+    let ip = if let Some(interface) = &sockopt.interface {
         get_interface(a.is_ipv4(), interface)
     } else {
         if a.is_ipv4() {
@@ -90,13 +112,12 @@ pub async fn stream(a: SocketAddr, interface: Option<String>) -> tokio::io::Resu
     Ok(tcpsocket(
         SocketAddr::new(ip, 0),
         a.port() == 53 || a.port() == 853,
-    )?
-    .connect(a)
-    .await?)
+        &sockopt
+    )?.connect(a).await?)
 }
 
 #[inline(always)]
-pub fn get_interface(ipv4: bool, interface: String) -> IpAddr {
+pub fn get_interface(ipv4: bool, interface: &str) -> IpAddr {
     // if user input ip as interface
     if let Ok(ip) = IpAddr::from_str(&interface) {
         return ip;
@@ -130,5 +151,89 @@ pub fn get_interface(ipv4: bool, interface: String) -> IpAddr {
     match ip.unwrap().1 {
         IpAddr::V4(ip) => IpAddr::V4(ip),
         IpAddr::V6(ip) => IpAddr::V6(ip)
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub mod tcp_options {
+    pub fn set_tcp_mss(socket: &tokio::net::TcpSocket, mss: i32) -> Result<(), ()> {
+        let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
+    
+        let result = unsafe {
+            libc::setsockopt(
+                fd,
+                libc::IPPROTO_TCP,
+                libc::TCP_MAXSEG,
+                &mss as *const i32 as *const libc::c_void,
+                std::mem::size_of::<i32>() as libc::socklen_t,
+            )
+        };
+        if result == -1 {
+            return Err(());
+        }
+        Ok(())
+    }
+    pub fn set_tcp_congestion(socket: &tokio::net::TcpSocket, congestion: &str) -> Result<(), ()> {
+        if let Ok(c) = std::ffi::CString::new(congestion) {
+            let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
+    
+            let result = unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::IPPROTO_TCP,
+                    libc::TCP_CONGESTION,
+                    c.as_ptr() as *const _,
+                    c.to_bytes().len() as libc::socklen_t,
+                )
+            };
+            if result == -1 {
+                return Err(());
+            }
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+    pub fn set_tcp_bind_device(socket: &tokio::net::TcpSocket, device: &str) -> Result<(), ()> {
+        if let Ok(device) = std::ffi::CString::new(device) {
+            let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
+    
+            let result = unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_BINDTODEVICE,
+                    device.as_ptr() as *const _,
+                    device.to_bytes().len() as libc::socklen_t,
+                )
+            };
+            if result == -1 {
+                return Err(());
+            }
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+    pub fn set_udp_bind_device(socket: &tokio::net::UdpSocket, device: &str) -> Result<(), ()> {
+        if let Ok(device) = std::ffi::CString::new(device) {
+            let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
+    
+            let result = unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_BINDTODEVICE,
+                    device.as_ptr() as *const _,
+                    device.to_bytes().len() as libc::socklen_t,
+                )
+            };
+            if result == -1 {
+                return Err(());
+            }
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 }

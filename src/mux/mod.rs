@@ -85,7 +85,7 @@ pub async fn xudp<S>(
     >,
     blacklist: &Option<Vec<crate::config::BlackList>>,
     buf_size: usize,
-    interface: Option<String>,
+    sockopt: crate::config::SockOpt,
     peer_ip: IpAddr 
 ) -> tokio::io::Result<()>
 where
@@ -125,7 +125,7 @@ where
         ))
     };
     
-    let ip = if let Some(interface) = interface {
+    let ip = if let Some(interface) = &sockopt.interface {
         crate::tcp::get_interface(peer_ip.is_ipv4(), interface)
     } else {
         if peer_ip.is_ipv4() {
@@ -135,6 +135,16 @@ where
         }
     };
     let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
+    #[cfg(target_os = "linux")]
+    {
+        if sockopt.bind_to_device {
+            if let Some(interface) = &sockopt.interface {
+                if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() && crate::log(){
+                    println!("Failed to set bind to device");
+                };
+            }
+        }
+    }
     let domain_map: RefCell<HashMap<IpAddr, String>> = RefCell::new(HashMap::new());
 
     if let Err(e) = tokio::try_join!(

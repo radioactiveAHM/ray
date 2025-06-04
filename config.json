@@ -1,41 +1,46 @@
 {
-    "log": false,
-    "thread_stack_size": null,
-    "tcp_proxy_mod": "Stack",
-    "tcp_proxy_buffer_size": null,
-    "udp_proxy_buffer_size": null,
-    "tcp_idle_timeout": 150,
-    "udp_idle_timeout": 90,
-    "users": [
-        {
-            "name": "admin",
-            "uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
-        }
-    ],
-    "inbounds": [
-        {
-            "listen": "0.0.0.0:80",
-            "transporter": "TCP",
-            "tls": {
-                "enable": false,
-                "max_fragment_size": null,
-                "alpn": ["h2", "http/1.1"],
-                "certificate": "cert.pem",
-                "key": "key.pem"
-            },
-            "interface": null
-        }
-    ],
-    "resolver": {
-        "address": null,
-        "ip_port": "8.8.8.8:53",
-        "mode": "IPv4"
-    },
-    "tcp_socket_options": {
-        "send_buffer_size": null,
-        "recv_buffer_size": null,
-        "nodelay": null,
-        "keepalive": null
-    },
-    "blacklist": null
+	"log": false,
+	"thread_stack_size": null,
+	"tcp_proxy_mod": "Stack",
+	"tcp_proxy_buffer_size": null,
+	"udp_proxy_buffer_size": null,
+	"tcp_idle_timeout": 150,
+	"udp_idle_timeout": 90,
+	"users": [
+		{
+			"name": "admin",
+			"uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
+		}
+	],
+	"inbounds": [
+		{
+			"listen": "0.0.0.0:80",
+			"transporter": "TCP",
+			"tls": {
+				"enable": false,
+				"max_fragment_size": null,
+				"alpn": ["h2", "http/1.1"],
+				"certificate": "cert.pem",
+				"key": "key.pem"
+			},
+			"sockopt": {
+				"interface": null,
+				"bind_to_device": false,
+				"mss": null,
+				"congestion": null
+			}
+		}
+	],
+	"resolver": {
+		"address": null,
+		"ip_port": "8.8.8.8:53",
+		"mode": "IPv4"
+	},
+	"tcp_socket_options": {
+		"send_buffer_size": null,
+		"recv_buffer_size": null,
+		"nodelay": null,
+		"keepalive": null
+	},
+	"blacklist": null
 }

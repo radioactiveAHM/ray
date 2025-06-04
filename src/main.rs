@@ -170,7 +170,7 @@ async fn async_main(c: config::Config) {
                         Ok(tc) => {
                             tokio::spawn(async move {
                                 if let Err(e) =
-                                    tls_handler(tc, config, cresolver, inbound.transporter.clone(), inbound.interface.clone())
+                                    tls_handler(tc, config, cresolver, inbound.transporter.clone(), inbound.sockopt.clone())
                                         .await
                                 {
                                     if log() {
@@ -198,7 +198,7 @@ async fn async_main(c: config::Config) {
                                     peer_addr,
                                     cresolver,
                                     inbound.transporter.clone(),
-                                    inbound.interface.clone()
+                                    inbound.sockopt.clone()
                                 )
                                 .await
                                 {
@@ -229,12 +229,12 @@ async fn tls_handler(
         >,
     >,
     transport: config::Transporter,
-    interface: Option<String>
+    sockopt: config::SockOpt
 ) -> tokio::io::Result<()> {
     let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
     let stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream> = tc.accept().await?;
 
-    stream_handler(stream, config, peer_addr, resolver, transport, interface).await
+    stream_handler(stream, config, peer_addr, resolver, transport, sockopt).await
 }
 
 async fn stream_handler<S>(
@@ -247,7 +247,7 @@ async fn stream_handler<S>(
         >,
     >,
     transport: config::Transporter,
-    interface: Option<String>
+    sockopt: config::SockOpt
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
@@ -304,7 +304,7 @@ where
                         return Err(verror::VError::TransporterError.into());
                     }
                 }
-                return transporters::websocket_transport(ws, config, resolver, peer_addr, interface).await;
+                return transporters::websocket_transport(ws, config, resolver, peer_addr, sockopt).await;
             } else {
                 return Err(verror::VError::TransporterError.into());
             }
@@ -319,8 +319,8 @@ where
     let payload = buff[..size].to_vec();
     drop(buff);
     if let Err(e) = match vless.rt {
-        vless::SocketType::TCP => handle_tcp(vless, payload, stream, config, interface).await,
-        vless::SocketType::UDP => handle_udp(vless, payload, stream, config, interface).await,
+        vless::SocketType::TCP => handle_tcp(vless, payload, stream, config, sockopt).await,
+        vless::SocketType::UDP => handle_udp(vless, payload, stream, config, sockopt).await,
         vless::SocketType::MUX => {
             mux::xudp(
                 stream,
@@ -328,7 +328,7 @@ where
                 resolver,
                 &config.blacklist,
                 config.udp_proxy_buffer_size.unwrap_or(8),
-                interface,
+                sockopt,
                 peer_addr.ip()
             )
             .await
@@ -350,13 +350,13 @@ async fn handle_tcp<S>(
     payload: Vec<u8>,
     mut stream: S,
     config: &'static config::Config,
-    interface: Option<String>
+    sockopt: config::SockOpt
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
     let (target_addr, body) = vless.target.as_ref().unwrap();
-    let mut target = tcp::stream(*target_addr, interface).await?;
+    let mut target = tcp::stream(*target_addr, sockopt).await?;
 
     if !&payload[*body..].is_empty() {
         let _ = target.write(&payload[*body..]).await?;
@@ -468,13 +468,13 @@ async fn handle_udp<S>(
     payload: Vec<u8>,
     mut stream: S,
     config: &'static config::Config,
-    interface: Option<String>
+    sockopt: config::SockOpt
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
     let (target, body) = vless.target.as_ref().unwrap();
-    let ip = if let Some(interface) = interface {
+    let ip = if let Some(interface) = &sockopt.interface {
         tcp::get_interface(target.is_ipv4(), interface)
     } else {
         if target.is_ipv4() {
@@ -484,6 +484,16 @@ where
         }
     };
     let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
+    #[cfg(target_os = "linux")]
+    {
+        if sockopt.bind_to_device {
+            if let Some(interface) = &sockopt.interface {
+                if tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() && crate::log(){
+                    println!("Failed to set bind to device");
+                };
+            }
+        }
+    }
     udp.connect(target).await?;
 
     // first packet might not be complete
