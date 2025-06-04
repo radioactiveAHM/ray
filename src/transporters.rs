@@ -69,12 +69,12 @@ where
     Ok(())
 }
 
-struct WST<S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static> {
+struct Wst<S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static> {
     pub ws: tokio_websockets::WebSocketStream<S>,
     closed: bool,
 }
 
-impl<S> AsyncRead for WST<S>
+impl<S> AsyncRead for Wst<S>
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
 {
@@ -114,7 +114,7 @@ where
     }
 }
 
-impl<S> AsyncWrite for WST<S>
+impl<S> AsyncWrite for Wst<S>
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
 {
@@ -155,7 +155,7 @@ where
     }
 }
 
-impl<S> crate::PeekWraper for WST<S>
+impl<S> crate::PeekWraper for Wst<S>
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
 {
@@ -174,7 +174,7 @@ pub async fn websocket_transport<S>(
         >,
     >,
     peer_addr: std::net::SocketAddr,
-    sockopt: crate::config::SockOpt
+    sockopt: crate::config::SockOpt,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static,
@@ -196,10 +196,14 @@ where
         return Err(crate::verror::VError::TransporterError.into());
     };
 
-    let wst = WST { ws, closed: false };
+    let wst = Wst { ws, closed: false };
     if let Err(e) = match vless.rt {
-        crate::vless::SocketType::TCP => crate::handle_tcp(vless, payload, wst, config, sockopt).await,
-        crate::vless::SocketType::UDP => crate::handle_udp(vless, payload, wst, config, sockopt).await,
+        crate::vless::SocketType::TCP => {
+            crate::handle_tcp(vless, payload, wst, config, sockopt).await
+        }
+        crate::vless::SocketType::UDP => {
+            crate::handle_udp(vless, payload, wst, config, sockopt).await
+        }
         crate::vless::SocketType::MUX => {
             crate::mux::xudp(
                 wst,
@@ -208,7 +212,7 @@ where
                 &config.blacklist,
                 config.udp_proxy_buffer_size.unwrap_or(8),
                 sockopt,
-                peer_addr.ip()
+                peer_addr.ip(),
             )
             .await
         }

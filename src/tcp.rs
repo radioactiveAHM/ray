@@ -1,6 +1,7 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    pin::Pin, str::FromStr,
+    pin::Pin,
+    str::FromStr,
 };
 
 use tokio::net::{TcpSocket, TcpStream};
@@ -39,7 +40,11 @@ where
 
 #[inline(always)]
 #[allow(unused_variables)]
-pub fn tcpsocket(a: SocketAddr, minimize: bool, sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpSocket> {
+pub fn tcpsocket(
+    a: SocketAddr,
+    minimize: bool,
+    sockopt: &crate::config::SockOpt,
+) -> tokio::io::Result<TcpSocket> {
     let socket: TcpSocket = if a.is_ipv4() {
         tokio::net::TcpSocket::new_v4()?
     } else {
@@ -49,18 +54,18 @@ pub fn tcpsocket(a: SocketAddr, minimize: bool, sockopt: &crate::config::SockOpt
     #[cfg(target_os = "linux")]
     {
         if let Some(mss) = sockopt.mss {
-            if tcp_options::set_tcp_mss(&socket, mss).is_err() && crate::log(){
+            if tcp_options::set_tcp_mss(&socket, mss).is_err() && crate::log() {
                 println!("Failed to set tcp mss");
             };
         }
         if let Some(congestion) = &sockopt.congestion {
-            if tcp_options::set_tcp_congestion(&socket, congestion).is_err() && crate::log(){
+            if tcp_options::set_tcp_congestion(&socket, congestion).is_err() && crate::log() {
                 println!("Failed to set tcp congestion");
             };
         }
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
-                if tcp_options::set_tcp_bind_device(&socket, &interface).is_err() && crate::log(){
+                if tcp_options::set_tcp_bind_device(&socket, &interface).is_err() && crate::log() {
                     println!("Failed to set bind to device");
                 };
             }
@@ -98,28 +103,31 @@ pub fn tcpsocket(a: SocketAddr, minimize: bool, sockopt: &crate::config::SockOpt
 }
 
 #[inline(always)]
-pub async fn stream(a: SocketAddr, sockopt: crate::config::SockOpt) -> tokio::io::Result<TcpStream> {
+pub async fn stream(
+    a: SocketAddr,
+    sockopt: crate::config::SockOpt,
+) -> tokio::io::Result<TcpStream> {
     let ip = if let Some(interface) = &sockopt.interface {
         get_interface(a.is_ipv4(), interface)
+    } else if a.is_ipv4() {
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED)
     } else {
-        if a.is_ipv4() {
-            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
-        } else {
-            IpAddr::V6(Ipv6Addr::UNSPECIFIED)
-        }
+        IpAddr::V6(Ipv6Addr::UNSPECIFIED)
     };
-    
-    Ok(tcpsocket(
+
+    tcpsocket(
         SocketAddr::new(ip, 0),
         a.port() == 53 || a.port() == 853,
-        &sockopt
-    )?.connect(a).await?)
+        &sockopt,
+    )?
+    .connect(a)
+    .await
 }
 
 #[inline(always)]
 pub fn get_interface(ipv4: bool, interface: &str) -> IpAddr {
     // if user input ip as interface
-    if let Ok(ip) = IpAddr::from_str(&interface) {
+    if let Ok(ip) = IpAddr::from_str(interface) {
         return ip;
     }
     // Cause panic if it fails, informing the user that the binding interface is not available.
@@ -137,7 +145,8 @@ pub fn get_interface(ipv4: bool, interface: &str) -> IpAddr {
     if ip.is_none() {
         if crate::log() {
             println!(
-                "interface {} not found or interface does not provide IPv6", &interface
+                "interface {} not found or interface does not provide IPv6",
+                &interface
             );
         }
         // fallback
@@ -148,17 +157,14 @@ pub fn get_interface(ipv4: bool, interface: &str) -> IpAddr {
         }
     }
 
-    match ip.unwrap().1 {
-        IpAddr::V4(ip) => IpAddr::V4(ip),
-        IpAddr::V6(ip) => IpAddr::V6(ip)
-    }
+    ip.unwrap().1
 }
 
 #[cfg(target_os = "linux")]
 pub mod tcp_options {
     pub fn set_tcp_mss(socket: &tokio::net::TcpSocket, mss: i32) -> Result<(), ()> {
         let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-    
+
         let result = unsafe {
             libc::setsockopt(
                 fd,
@@ -176,7 +182,7 @@ pub mod tcp_options {
     pub fn set_tcp_congestion(socket: &tokio::net::TcpSocket, congestion: &str) -> Result<(), ()> {
         if let Ok(c) = std::ffi::CString::new(congestion) {
             let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-    
+
             let result = unsafe {
                 libc::setsockopt(
                     fd,
@@ -197,7 +203,7 @@ pub mod tcp_options {
     pub fn set_tcp_bind_device(socket: &tokio::net::TcpSocket, device: &str) -> Result<(), ()> {
         if let Ok(device) = std::ffi::CString::new(device) {
             let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-    
+
             let result = unsafe {
                 libc::setsockopt(
                     fd,
@@ -218,7 +224,7 @@ pub mod tcp_options {
     pub fn set_udp_bind_device(socket: &tokio::net::UdpSocket, device: &str) -> Result<(), ()> {
         if let Ok(device) = std::ffi::CString::new(device) {
             let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-    
+
             let result = unsafe {
                 libc::setsockopt(
                     fd,

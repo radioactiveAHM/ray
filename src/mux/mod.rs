@@ -86,7 +86,7 @@ pub async fn xudp<S>(
     blacklist: &Option<Vec<crate::config::BlackList>>,
     buf_size: usize,
     sockopt: crate::config::SockOpt,
-    peer_ip: IpAddr 
+    peer_ip: IpAddr,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static,
@@ -124,22 +124,22 @@ where
             "Connection idle timeout",
         ))
     };
-    
+
     let ip = if let Some(interface) = &sockopt.interface {
         crate::tcp::get_interface(peer_ip.is_ipv4(), interface)
+    } else if peer_ip.is_ipv4() {
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED)
     } else {
-        if peer_ip.is_ipv4() {
-            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
-        } else {
-            IpAddr::V6(Ipv6Addr::UNSPECIFIED)
-        }
+        IpAddr::V6(Ipv6Addr::UNSPECIFIED)
     };
     let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
     #[cfg(target_os = "linux")]
     {
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
-                if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() && crate::log(){
+                if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err()
+                    && crate::log()
+                {
                     println!("Failed to set bind to device");
                 };
             }
@@ -227,6 +227,7 @@ where
 }
 
 #[inline(always)]
+#[allow(clippy::too_many_arguments)]
 pub async fn copy_t2u<R>(
     udp: &tokio::net::UdpSocket,
     mut r: R,

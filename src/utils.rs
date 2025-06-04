@@ -15,6 +15,7 @@ pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
 
 #[allow(mutable_transmutes)]
 #[inline(always)]
+#[allow(clippy::mut_from_ref)]
 pub fn unsafe_refmut<'a, T: ?Sized>(r: &'a T) -> &'a mut T {
     unsafe { std::mem::transmute::<&'a T, &mut T>(r) }
 }
