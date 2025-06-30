@@ -20,6 +20,15 @@ pub enum VError {
     MailFormedUdpPacket,
     DomainInBlacklist,
     WsClosed,
+    // XHttp Errors
+    NoUUID,
+    NoContentLength,
+    ParseSecError,
+    NotInitiated,
+    WaitForSecTimeout,
+    WaitForInitTimeout,
+    WaitForFrameTimeout,
+    NoDataFrame
 }
 impl Display for VError {
     #[cold]
@@ -43,6 +52,15 @@ impl Display for VError {
             VError::BufferOverflow => write!(f, "BufferOverflow"),
             VError::DomainInBlacklist => write!(f, "Domain In Blacklist"),
             VError::WsClosed => write!(f, "WS Close Frame Received"),
+            // XHttp Errors
+            VError::NoUUID => write!(f, "NoUUID"),
+            VError::NoContentLength => write!(f, "NoContentLength"),
+            VError::ParseSecError =>  write!(f, "ParseSecError"),
+            VError::NotInitiated =>  write!(f, "NoInitiated"),
+            VError::WaitForSecTimeout =>  write!(f, "WaitForSecTimeout"),
+            VError::WaitForInitTimeout =>  write!(f, "WaitForInitTimeout"),
+            VError::WaitForFrameTimeout =>  write!(f, "WaitForInitTimeout"),
+            VError::NoDataFrame =>  write!(f, "NoDataFrame"),
         }
     }
 }

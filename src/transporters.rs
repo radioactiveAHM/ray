@@ -147,8 +147,7 @@ where
         _cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        let bin_message = tokio_websockets::Message::binary(bytes::Bytes::copy_from_slice(buf));
-        match self.ws.start_send_unpin(bin_message) {
+        match self.ws.start_send_unpin(tokio_websockets::Message::binary(bytes::Bytes::copy_from_slice(buf))) {
             Ok(_) => std::task::Poll::Ready(Ok(buf.len())),
             Err(e) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
         }
@@ -212,7 +211,7 @@ where
                 &config.blacklist,
                 config.udp_proxy_buffer_size.unwrap_or(8),
                 sockopt,
-                peer_addr.ip(),
+                peer_addr.ip()
             )
             .await
         }

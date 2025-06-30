@@ -21,8 +21,7 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 **Notes:**
 
 - Increasing the buffer size for `tcp_proxy_buffer_size` and `udp_proxy_buffer_size` enhances throughput and reduces latency and cpu usage. However, be mindful of memory usage and the number of users if the system runs out of memory, the application will crash.
-- **Stack Proxy Method:** A built-in TCP proxy method that avoids buffering across multiple reads. Unlike other methods, the buffer is allocated directly on the stack, ensuring efficient memory usage. Stack allocated Buffer sizes are limited to `4`, `8`, `16`, `32`, `64`, `128`, `256`, `512` and `1024` each multiplied by `1024` (e.g., `4` corresponds to `4096` bytes) other sizes allocated on heap.
-- When using the Stack Proxy Method with a stack-allocated buffer, there is a risk of exceeding the stack size, leading to a potential crash. To mitigate this, adjust the `thread_stack_size` accordingly.
+- **Stack Proxy Method:** A built-in TCP proxy method that avoids buffering across multiple reads.
 
 ```json
 {
@@ -69,7 +68,6 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
         "recv_buffer_size": null, // The size of the socket receive buffer, if set; null means default system size
         "nodelay": null, // Whether to disable Nagle’s algorithm; false means packets may be buffered for efficiency
         "keepalive": null, // Whether to enable keepalive packets to maintain connection activity
-        "listen_backlog": 128 // Maximum number of queued connections waiting to be accepted
     },
     "blacklist": null // Domain blacklist
 }
@@ -116,6 +114,30 @@ WS
             "host": "meow.com", // If set null any host will be accepted
             "threshold": null, // The default is 8 KiB. Unit is Kb. !!! It's better to set the value same as tcp_proxy_buffer_size.
             "frame_size": null // Max Outgoing frame size. The default is 4MiB. Unit is Kb.
+        }
+    }
+```
+
+XHttp
+
+```json
+    "transporter": {
+        "XHttp": {
+            "initial_connection_window_size": null,
+            "initial_window_size": null,
+            "max_concurrent_streams": null,
+            "max_frame_size": null,
+            "max_send_buffer_size": null,
+            "reset_stream_duration": null,
+
+            "recv_data_frame_timeout": 30000,
+            "tcp_buffer_size": 8,
+
+            "wait_for_sec_timeout": 30000,
+            "wait_for_sec_interval": 100,
+
+            "wait_for_init_timeout": 10000,
+            "wait_for_init_interval": 50
         }
     }
 ```

@@ -27,6 +27,7 @@ mod udputils;
 mod utils;
 mod verror;
 mod vless;
+mod xhttp;
 
 static mut LOG: bool = false;
 static mut UIT: u64 = 15;
@@ -164,6 +165,13 @@ async fn async_main(c: config::Config) {
                 c.max_fragment_size = inbound.tls.max_fragment_size;
                 let acceptor = TlsAcceptor::from(Arc::new(c));
 
+                // xhttp handle
+                // only with tls
+                if let Some(xhttp_option) = inbound.transporter.is_xhttp() {
+                    xhttp::xhttp(acceptor, tcp, config, cresolver, inbound.sockopt.clone(), xhttp_option).await;
+                    return;
+                }
+
                 loop {
                     match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
                         Ok(tc) => {
@@ -259,6 +267,7 @@ where
 
     // Handle transporters
     match &transport {
+        config::Transporter::XHttp(_) => return Ok(()),
         config::Transporter::TCP => {
             size = stream.read(&mut buff).await?;
         }
@@ -332,7 +341,7 @@ where
                 &config.blacklist,
                 config.udp_proxy_buffer_size.unwrap_or(8),
                 sockopt,
-                peer_addr.ip(),
+                peer_addr.ip()
             )
             .await
         }
@@ -359,7 +368,7 @@ where
     S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
 {
     let (target_addr, body) = vless.target.as_ref().unwrap();
-    let mut target = tcp::stream(*target_addr, sockopt).await?;
+    let mut target = tcp::stream(*target_addr, &sockopt).await?;
 
     if !&payload[*body..].is_empty() {
         let _ = target.write(&payload[*body..]).await?;
@@ -429,8 +438,12 @@ where
                 tokio::io::BufReader::with_capacity(tpbs * 1024, unsafe_refmut(&target));
 
             if let Err(e) = tokio::try_join!(
-                tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target),
-                tokio::io::copy_buf(&mut bufwraper_target, &mut tcpwriter_client),
+                utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
+                    tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target).await
+                }),
+                utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
+                    tokio::io::copy_buf(&mut bufwraper_target, &mut tcpwriter_client).await
+                }),
                 timeout_handler,
             ) {
                 let _ = tcpwriter_target.shutdown().await;
@@ -452,8 +465,12 @@ where
             };
 
             if let Err(e) = tokio::try_join!(
-                pipe::stack_copy(unsafe_refmut(&stream), &mut tcpwriter_target, tpbs),
-                pipe::stack_copy(unsafe_refmut(&target), &mut tcpwriter_client, tpbs),
+                utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
+                    pipe::stack_copy(unsafe_refmut(&stream), &mut tcpwriter_target, tpbs).await
+                }),
+                utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
+                    pipe::stack_copy(unsafe_refmut(&target), &mut tcpwriter_client, tpbs).await
+                }),
                 timeout_handler,
             ) {
                 let _ = tcpwriter_target.shutdown().await;
@@ -543,9 +560,12 @@ where
     };
 
     // proxy UDP
+    let ch_snd_cloned = ch_snd.clone();
     if let Err(e) = tokio::try_join!(
         timeout_handler,
-        udputils::copy_t2u(&udp, unsafe_refmut(&stream), ch_snd.clone(), buf_size),
+        utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
+            udputils::copy_t2u(&udp, unsafe_refmut(&stream), ch_snd_cloned, buf_size).await
+        }),
         udputils::copy_u2t(&udp, unsafe_refmut(&stream), ch_snd)
     ) {
         let _ = stream.shutdown().await;

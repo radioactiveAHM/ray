@@ -24,7 +24,6 @@ pub struct Tls {
 }
 
 #[derive(serde::Deserialize, Clone)]
-#[allow(dead_code)]
 pub struct Http {
     pub path: String,
     pub method: String,
@@ -32,12 +31,35 @@ pub struct Http {
 }
 
 #[derive(serde::Deserialize, Clone)]
-#[allow(dead_code)]
 pub struct Ws {
     pub path: String,
     pub host: Option<String>,
     pub threshold: Option<usize>,
     pub frame_size: Option<usize>,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct Xhttp {
+    // H2
+    pub initial_connection_window_size: Option<u32>,
+    pub initial_window_size: Option<u32>,
+    pub target_window_size: Option<u32>,
+    pub max_concurrent_streams: Option<u32>,
+    pub max_frame_size: Option<u32>,
+    pub max_send_buffer_size: Option<usize>,
+    pub reset_stream_duration: Option<u64>,
+
+    pub recv_data_frame_timeout: u64,
+    pub tcp_buffer_size: usize,
+
+    pub wait_for_sec_timeout: u64,
+    pub wait_for_sec_interval: u64,
+
+    pub wait_for_init_timeout: u64,
+    pub wait_for_init_interval: u64,
+
+    pub get_resp_headers: Vec<(String, String)>,
+    pub post_resp_headers: Vec<(String, String)>
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -47,6 +69,16 @@ pub enum Transporter {
     HTTP(Http),
     HttpUpgrade(Http),
     WS(Ws),
+    XHttp(Xhttp)
+}
+
+impl Transporter {
+    pub fn is_xhttp(&self) -> Option<Xhttp> {
+        match self {
+            Self::XHttp(xhttp) => Some(xhttp.clone()),
+            _ => None
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -99,13 +131,14 @@ pub struct Config {
     pub tcp_proxy_mod: TcpProxyMod,
     pub tcp_proxy_buffer_size: Option<usize>,
     pub udp_proxy_buffer_size: Option<usize>,
+    pub tcp_close_delay: u64,
     pub tcp_idle_timeout: u64,
     pub udp_idle_timeout: u64,
     pub users: Vec<User>,
     pub inbounds: Vec<Inbound>,
     pub resolver: Resolver,
     pub tcp_socket_options: TcpSocketOptions,
-    pub blacklist: Option<Vec<BlackList>>,
+    pub blacklist: Option<Vec<BlackList>>
 }
 
 pub fn load_config() -> Config {

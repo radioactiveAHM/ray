@@ -86,7 +86,7 @@ pub async fn xudp<S>(
     blacklist: &Option<Vec<crate::config::BlackList>>,
     buf_size: usize,
     sockopt: crate::config::SockOpt,
-    peer_ip: IpAddr,
+    peer_ip: IpAddr
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static,

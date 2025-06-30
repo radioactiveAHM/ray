@@ -105,7 +105,7 @@ pub fn tcpsocket(
 #[inline(always)]
 pub async fn stream(
     a: SocketAddr,
-    sockopt: crate::config::SockOpt,
+    sockopt: &crate::config::SockOpt,
 ) -> tokio::io::Result<TcpStream> {
     let ip = if let Some(interface) = &sockopt.interface {
         get_interface(a.is_ipv4(), interface)
@@ -118,7 +118,7 @@ pub async fn stream(
     tcpsocket(
         SocketAddr::new(ip, 0),
         a.port() == 53 || a.port() == 853,
-        &sockopt,
+        sockopt,
     )?
     .connect(a)
     .await
