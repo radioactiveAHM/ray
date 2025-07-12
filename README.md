@@ -21,13 +21,11 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 **Notes:**
 
 - Increasing the buffer size for `tcp_proxy_buffer_size` and `udp_proxy_buffer_size` enhances throughput and reduces latency and cpu usage. However, be mindful of memory usage and the number of users if the system runs out of memory, the application will crash.
-- **Stack Proxy Method:** A built-in TCP proxy method that avoids buffering across multiple reads.
 
 ```json
 {
     "log": false, // Enable logging. Disable for maximum performance
     "thread_stack_size": null, // The stack size (in bytes) for worker threads. The default stack size for spawned threads is 2 MiB. The actual stack size may be greater than this value if the platform specifies minimal stack size.
-    "tcp_proxy_mod": "Stack", // The TCP proxy supports two algorithm variants: `Stack` and `Buffer`. The `Buffer` algorithm accumulates multiple incoming readings before processing, improving efficiency but potentially introducing slight latency. Conversely, the `Stack` algorithm processes data immediately upon arrival, minimizing delay.
     "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)

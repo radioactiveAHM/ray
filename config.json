@@ -1,7 +1,6 @@
 {
 	"log": false,
 	"thread_stack_size": null,
-	"tcp_proxy_mod": "Stack",
 	"tcp_proxy_buffer_size": null,
 	"udp_proxy_buffer_size": null,
 	"tcp_close_delay": 2000,

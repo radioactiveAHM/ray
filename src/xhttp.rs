@@ -275,9 +275,7 @@ async fn handle_get(
                 drop_conn(&cm, &cid, stat).await?;
             }
             h2_w.reserve_capacity(wrapper.filled().len());
-            println!("size of packet {}", wrapper.filled().len());
-            let cap = std::future::poll_fn(|cx| h2_w.poll_capacity(cx)).await;
-            println!("size of cap {:?}", cap);
+            let _ = std::future::poll_fn(|cx| h2_w.poll_capacity(cx)).await;
             drop_conn(
                 &cm,
                 &cid,

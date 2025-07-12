@@ -4,8 +4,7 @@ use crate::utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
 pub async fn copy_u2t<W>(
     udp: &tokio::net::UdpSocket,
-    mut w: W,
-    ch_snd: tokio::sync::mpsc::Sender<()>,
+    mut w: W
 ) -> tokio::io::Result<()>
 where
     W: AsyncWrite + Unpin + Send,
@@ -15,7 +14,6 @@ where
     {
         // write first packet
         let size = udp.recv(&mut buff[4..]).await?;
-        let _ = ch_snd.try_send(());
         let octat = convert_u16_to_two_u8s_be(size as u16);
         buff[2..4].copy_from_slice(&octat);
         let _ = w.write(&buff[..size + 4]).await?;
@@ -24,7 +22,6 @@ where
 
     loop {
         let size = udp.recv(&mut buff[2..]).await?;
-        let _ = ch_snd.try_send(());
         let octat = convert_u16_to_two_u8s_be(size as u16);
         buff[0..2].copy_from_slice(&octat);
         let _ = w.write(&buff[..size + 2]).await?;
@@ -36,8 +33,7 @@ where
 
 struct UdpWriter<'a> {
     udp: &'a tokio::net::UdpSocket,
-    b: Vec<u8>,
-    ch_snd: tokio::sync::mpsc::Sender<()>,
+    b: Vec<u8>
 }
 impl AsyncWrite for UdpWriter<'_> {
     fn poll_write(
@@ -55,9 +51,6 @@ impl AsyncWrite for UdpWriter<'_> {
         if self.b.len() > 1024 * 16 {
             return std::task::Poll::Ready(Err(crate::verror::VError::BufferOverflow.into()));
         }
-
-        // send signal that connection is active
-        let _ = self.ch_snd.try_send(());
 
         let mut deadloop = 0u8;
         loop {
@@ -123,8 +116,8 @@ impl AsyncWrite for UdpWriter<'_> {
 pub async fn copy_t2u<R>(
     udp: &tokio::net::UdpSocket,
     r: R,
-    ch_snd: tokio::sync::mpsc::Sender<()>,
     buf_size: usize,
+    timeout_dur: u64
 ) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin + Send,
@@ -132,8 +125,7 @@ where
     let mut uw = UdpWriter {
         udp,
         b: Vec::with_capacity(buf_size * 1024), // buf_size unit is kb
-        ch_snd,
     };
 
-    crate::pipe::stack_copy(r, &mut uw, buf_size).await
+    crate::pipe::copy(r, &mut uw, buf_size, timeout_dur).await
 }

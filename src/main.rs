@@ -4,15 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    time::timeout,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_rustls::{
     TlsAcceptor,
     rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
-use utils::{unsafe_refmut, unsafe_staticref};
+use utils::unsafe_refmut;
 
 mod auth;
 mod blacklist;
@@ -53,53 +50,6 @@ fn resolver_mode() -> config::ResolvingMode {
 
 fn tso() -> config::TcpSocketOptions {
     unsafe { TSO }
-}
-
-trait PeekWraper {
-    async fn peek(&self) -> tokio::io::Result<()>;
-}
-impl PeekWraper for tokio::net::TcpStream {
-    async fn peek(&self) -> tokio::io::Result<()> {
-        let mut buf = [0; 2];
-        let mut wraper = ReadBuf::new(&mut buf);
-        std::future::poll_fn(|cx| match self.poll_peek(cx, &mut wraper) {
-            std::task::Poll::Pending => std::task::Poll::Ready(Ok(())),
-            std::task::Poll::Ready(Ok(size)) => {
-                if size == 0 {
-                    std::task::Poll::Ready(Err(tokio::io::Error::new(
-                        std::io::ErrorKind::ConnectionAborted,
-                        "Peek: ConnectionAborted",
-                    )))
-                } else {
-                    std::task::Poll::Ready(Ok(()))
-                }
-            }
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
-        })
-        .await
-    }
-}
-
-impl PeekWraper for tokio_rustls::server::TlsStream<tokio::net::TcpStream> {
-    async fn peek(&self) -> tokio::io::Result<()> {
-        let mut buf = [0; 2];
-        let mut wraper = ReadBuf::new(&mut buf);
-        std::future::poll_fn(|cx| match self.get_ref().0.poll_peek(cx, &mut wraper) {
-            std::task::Poll::Pending => std::task::Poll::Ready(Ok(())),
-            std::task::Poll::Ready(Ok(size)) => {
-                if size == 0 {
-                    std::task::Poll::Ready(Err(tokio::io::Error::new(
-                        std::io::ErrorKind::ConnectionAborted,
-                        "Peek: ConnectionAborted",
-                    )))
-                } else {
-                    std::task::Poll::Ready(Ok(()))
-                }
-            }
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
-        })
-        .await
-    }
 }
 
 fn main() {
@@ -260,7 +210,7 @@ async fn stream_handler<S>(
     sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let mut buff: Vec<u8> = vec![0; 1024 * 8];
     let mut size;
@@ -365,7 +315,7 @@ async fn handle_tcp<S>(
     sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let (target_addr, body) = vless.target.as_ref().unwrap();
     let mut target = tcp::stream(*target_addr, &sockopt).await?;
@@ -375,109 +325,32 @@ where
     }
     drop(payload);
 
-    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
-    let stream_ghost = unsafe_staticref(&stream);
-    // A timeout controller listens for both upload and download activities. If there is no upload or download activity for a specified duration, the connection will be closed.
-    let timeout_handler = async move {
-        let mut dur = 0;
-        loop {
-            if dur >= config.tcp_idle_timeout {
-                break;
-            }
-            // idle mode
-            match timeout(
-                std::time::Duration::from_secs(config.tcp_idle_timeout / 10),
-                async { ch_rcv.recv().await },
-            )
-            .await
-            {
-                Err(_) => dur += config.tcp_idle_timeout / 10,
-                Ok(None) => break,
-                _ => {
-                    dur = 0;
-                    continue;
-                }
-            };
-            // check if connection is alive using peek
-            stream_ghost.peek().await?;
-        }
-
-        Err::<(), tokio::io::Error>(tokio::io::Error::new(
-            std::io::ErrorKind::TimedOut,
-            "Connection idle timeout",
-        ))
-    };
-
     let mut tpbs = config.tcp_proxy_buffer_size.unwrap_or(8);
     if target_addr.port() == 53 || target_addr.port() == 853 {
         tpbs = 8;
     }
 
-    // Reason for using `unsafe_refmut`:
-    // The `try_join!` macro executes tasks concurrently but does not run them in true parallel.
-    // This means the tasks may interleave execution but do not utilize separate cores simultaneously.
-    // Consequently, using `tokio::io::split`, which is designed for safely splitting read/write halves
-    // in parallel execution, is unnecessary in this case.
-    match config.tcp_proxy_mod {
-        config::TcpProxyMod::Buffer => {
-            let _ = stream.write(&[0, 0]).await?;
+    let _ = stream.write(&[0, 0]).await?;
 
-            let mut tcpwriter_client = tcp::TcpWriterGeneric {
-                hr: Pin::new(unsafe_refmut(&stream)),
-                signal: ch_snd.clone(),
-            };
+    let mut tcpwriter_client = tcp::TcpWriterGeneric {
+        hr: Pin::new(unsafe_refmut(&stream))
+    };
 
-            let mut tcpwriter_target = tcp::TcpWriterGeneric {
-                hr: Pin::new(unsafe_refmut(&target)),
-                signal: ch_snd,
-            };
+    let mut tcpwriter_target = tcp::TcpWriterGeneric {
+        hr: Pin::new(unsafe_refmut(&target))
+    };
 
-            let mut bufwraper_client =
-                tokio::io::BufReader::with_capacity(tpbs * 1024, unsafe_refmut(&stream));
-            let mut bufwraper_target =
-                tokio::io::BufReader::with_capacity(tpbs * 1024, unsafe_refmut(&target));
-
-            if let Err(e) = tokio::try_join!(
-                utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
-                    tokio::io::copy_buf(&mut bufwraper_client, &mut tcpwriter_target).await
-                }),
-                utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
-                    tokio::io::copy_buf(&mut bufwraper_target, &mut tcpwriter_client).await
-                }),
-                timeout_handler,
-            ) {
-                let _ = tcpwriter_target.shutdown().await;
-                let _ = tcpwriter_client.shutdown().await;
-                return Err(e);
-            }
-        }
-        config::TcpProxyMod::Stack => {
-            let _ = stream.write(&[0, 0]).await?;
-
-            let mut tcpwriter_client = tcp::TcpWriterGeneric {
-                hr: Pin::new(unsafe_refmut(&stream)),
-                signal: ch_snd.clone(),
-            };
-
-            let mut tcpwriter_target = tcp::TcpWriterGeneric {
-                hr: Pin::new(unsafe_refmut(&target)),
-                signal: ch_snd,
-            };
-
-            if let Err(e) = tokio::try_join!(
-                utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
-                    pipe::stack_copy(unsafe_refmut(&stream), &mut tcpwriter_target, tpbs).await
-                }),
-                utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
-                    pipe::stack_copy(unsafe_refmut(&target), &mut tcpwriter_client, tpbs).await
-                }),
-                timeout_handler,
-            ) {
-                let _ = tcpwriter_target.shutdown().await;
-                let _ = tcpwriter_client.shutdown().await;
-                return Err(e);
-            }
-        }
+    if let Err(e) = tokio::try_join!(
+        utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
+            pipe::copy(unsafe_refmut(&stream), &mut tcpwriter_target, tpbs, config.tcp_idle_timeout).await
+        }),
+        utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
+            pipe::copy(unsafe_refmut(&target), &mut tcpwriter_client, tpbs, config.tcp_idle_timeout).await
+        })
+    ) {
+        let _ = tcpwriter_target.shutdown().await;
+        let _ = tcpwriter_client.shutdown().await;
+        return Err(e);
     }
     Ok(())
 }
@@ -491,7 +364,7 @@ async fn handle_udp<S>(
     sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + PeekWraper + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let (target, body) = vless.target.as_ref().unwrap();
     let ip = if let Some(interface) = &sockopt.interface {
@@ -521,37 +394,6 @@ where
     }
     drop(payload);
 
-    let (ch_snd, mut ch_rcv) = tokio::sync::mpsc::channel(10);
-    let stream_ghost = unsafe_staticref(&stream);
-    let timeout_handler = async move {
-        let mut dur = 0;
-        loop {
-            if dur >= uit() {
-                break;
-            }
-            // idle mode
-            match timeout(std::time::Duration::from_secs(uit() / 10), async {
-                ch_rcv.recv().await
-            })
-            .await
-            {
-                Err(_) => dur += uit() / 10,
-                Ok(None) => break,
-                _ => {
-                    dur = 0;
-                    continue;
-                }
-            };
-            // check if connection is alive using peek
-            stream_ghost.peek().await?;
-        }
-
-        Err::<(), tokio::io::Error>(tokio::io::Error::new(
-            std::io::ErrorKind::TimedOut,
-            "Connection idle timeout",
-        ))
-    };
-
     let buf_size = if target.port() == 53 || target.port() == 853 {
         // DNS does not require big buffer size
         8
@@ -560,13 +402,11 @@ where
     };
 
     // proxy UDP
-    let ch_snd_cloned = ch_snd.clone();
     if let Err(e) = tokio::try_join!(
-        timeout_handler,
         utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
-            udputils::copy_t2u(&udp, unsafe_refmut(&stream), ch_snd_cloned, buf_size).await
+            udputils::copy_t2u(&udp, unsafe_refmut(&stream), buf_size, uit()).await
         }),
-        udputils::copy_u2t(&udp, unsafe_refmut(&stream), ch_snd)
+        udputils::copy_u2t(&udp, unsafe_refmut(&stream))
     ) {
         let _ = stream.shutdown().await;
         return Err(e);

@@ -69,14 +69,14 @@ where
     Ok(())
 }
 
-struct Wst<S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static> {
+struct Wst<S: AsyncRead + AsyncWrite + Unpin + Send + 'static> {
     pub ws: tokio_websockets::WebSocketStream<S>,
     closed: bool,
 }
 
 impl<S> AsyncRead for Wst<S>
 where
-    S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
@@ -116,7 +116,7 @@ where
 
 impl<S> AsyncWrite for Wst<S>
 where
-    S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     fn poll_flush(
         mut self: std::pin::Pin<&mut Self>,
@@ -154,15 +154,6 @@ where
     }
 }
 
-impl<S> crate::PeekWraper for Wst<S>
-where
-    S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send,
-{
-    async fn peek(&self) -> tokio::io::Result<()> {
-        self.ws.get_ref().peek().await
-    }
-}
-
 #[inline(never)]
 pub async fn websocket_transport<S>(
     mut ws: tokio_websockets::WebSocketStream<S>,
@@ -176,7 +167,7 @@ pub async fn websocket_transport<S>(
     sockopt: crate::config::SockOpt,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + crate::PeekWraper + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let vless: crate::vless::Vless;
     let mut payload = Vec::new();
