@@ -8,9 +8,7 @@ use std::{
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 
 use crate::{
-    utils::{
-        convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_refmut
-    },
+    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_refmut},
     verror::VError,
 };
 
@@ -83,7 +81,7 @@ pub async fn xudp<S>(
     blacklist: &Option<Vec<crate::config::BlackList>>,
     buf_size: usize,
     sockopt: crate::config::SockOpt,
-    peer_ip: IpAddr
+    peer_ip: IpAddr,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -209,15 +207,7 @@ where
     let mut b = Vec::with_capacity(buf_size * 1024);
     b.extend_from_slice(&b0);
 
-    handle_xudp_packets(
-        Pin::new(&mut r),
-        udp,
-        b,
-        domain_map,
-        resolver,
-        blacklist,
-    )
-    .await
+    handle_xudp_packets(Pin::new(&mut r), udp, b, domain_map, resolver, blacklist).await
 }
 
 #[inline(always)]
@@ -285,21 +275,16 @@ where
             if internal_buf.len() < 2 {
                 break;
             };
-            let head_size =
-                convert_two_u8s_to_u16_be([internal_buf[0], internal_buf[1]]) as usize;
+            let head_size = convert_two_u8s_to_u16_be([internal_buf[0], internal_buf[1]]) as usize;
             if internal_buf.len() < head_size + 2 {
                 // incomplete head
                 break;
             }
             if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
                 // Stat: New Subjoin and Keep frames
-                let target = parse_target(
-                    &internal_buf[2..],
-                    resolver,
-                    blacklist,
-                    domain_map.clone(),
-                )
-                .await?;
+                let target =
+                    parse_target(&internal_buf[2..], resolver, blacklist, domain_map.clone())
+                        .await?;
                 let opt = internal_buf[5] == 1;
                 if opt {
                     let opt_len = convert_two_u8s_to_u16_be([

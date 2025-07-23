@@ -28,7 +28,7 @@ pub enum VError {
     WaitForSecTimeout,
     WaitForInitTimeout,
     WaitForFrameTimeout,
-    NoDataFrame
+    NoDataFrame,
 }
 impl Display for VError {
     #[cold]
@@ -55,12 +55,12 @@ impl Display for VError {
             // XHttp Errors
             VError::NoUUID => write!(f, "NoUUID"),
             VError::NoContentLength => write!(f, "NoContentLength"),
-            VError::ParseSecError =>  write!(f, "ParseSecError"),
-            VError::NotInitiated =>  write!(f, "NoInitiated"),
-            VError::WaitForSecTimeout =>  write!(f, "WaitForSecTimeout"),
-            VError::WaitForInitTimeout =>  write!(f, "WaitForInitTimeout"),
-            VError::WaitForFrameTimeout =>  write!(f, "WaitForInitTimeout"),
-            VError::NoDataFrame =>  write!(f, "NoDataFrame"),
+            VError::ParseSecError => write!(f, "ParseSecError"),
+            VError::NotInitiated => write!(f, "NoInitiated"),
+            VError::WaitForSecTimeout => write!(f, "WaitForSecTimeout"),
+            VError::WaitForInitTimeout => write!(f, "WaitForInitTimeout"),
+            VError::WaitForFrameTimeout => write!(f, "WaitForInitTimeout"),
+            VError::NoDataFrame => write!(f, "NoDataFrame"),
         }
     }
 }

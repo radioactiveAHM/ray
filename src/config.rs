@@ -59,7 +59,7 @@ pub struct Xhttp {
     pub wait_for_init_interval: u64,
 
     pub get_resp_headers: Vec<(String, String)>,
-    pub post_resp_headers: Vec<(String, String)>
+    pub post_resp_headers: Vec<(String, String)>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -69,14 +69,14 @@ pub enum Transporter {
     HTTP(Http),
     HttpUpgrade(Http),
     WS(Ws),
-    XHttp(Xhttp)
+    XHttp(Xhttp),
 }
 
 impl Transporter {
     pub fn is_xhttp(&self) -> Option<Xhttp> {
         match self {
             Self::XHttp(xhttp) => Some(xhttp.clone()),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -137,7 +137,7 @@ pub struct Config {
     pub inbounds: Vec<Inbound>,
     pub resolver: Resolver,
     pub tcp_socket_options: TcpSocketOptions,
-    pub blacklist: Option<Vec<BlackList>>
+    pub blacklist: Option<Vec<BlackList>>,
 }
 
 pub fn load_config() -> Config {

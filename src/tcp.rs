@@ -1,48 +1,13 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    pin::Pin,
     str::FromStr,
 };
 
 use tokio::net::{TcpSocket, TcpStream};
 
-pub struct TcpWriterGeneric<'a, W> {
-    pub hr: Pin<&'a mut W>
-}
-impl<W> tokio::io::AsyncWrite for TcpWriterGeneric<'_, W>
-where
-    W: tokio::io::AsyncWrite + Unpin + Send,
-{
-    fn poll_write(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        self.hr.as_mut().poll_write(cx, buf)
-    }
-
-    fn poll_flush(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        self.hr.as_mut().poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        self.hr.as_mut().poll_shutdown(cx)
-    }
-}
-
 #[inline(always)]
 #[allow(unused_variables)]
-pub fn tcpsocket(
-    a: SocketAddr,
-    minimize: bool,
-    sockopt: &crate::config::SockOpt,
-) -> tokio::io::Result<TcpSocket> {
+pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpSocket> {
     let socket: TcpSocket = if a.is_ipv4() {
         tokio::net::TcpSocket::new_v4()?
     } else {
@@ -70,29 +35,18 @@ pub fn tcpsocket(
         }
     }
 
-    if minimize {
-        // useful if socket is used for dns.
-        if socket.set_send_buffer_size(1024 * 4).is_ok() {
-            let _ = socket.set_recv_buffer_size(1024 * 4);
-        } else if socket.set_send_buffer_size(1024 * 8).is_ok() {
-            let _ = socket.set_recv_buffer_size(1024 * 8);
-        } else if socket.set_send_buffer_size(1024 * 16).is_ok() {
-            let _ = socket.set_recv_buffer_size(1024 * 16);
-        }
-    } else {
-        let options = crate::tso();
-        if let Some(sbs) = options.send_buffer_size {
-            socket.set_send_buffer_size(sbs)?;
-        }
-        if let Some(rbs) = options.recv_buffer_size {
-            socket.set_recv_buffer_size(rbs)?;
-        }
-        if let Some(nodelay) = options.nodelay {
-            socket.set_nodelay(nodelay)?;
-        }
-        if let Some(keepalive) = options.keepalive {
-            socket.set_nodelay(keepalive)?;
-        }
+    let options = crate::tso();
+    if let Some(sbs) = options.send_buffer_size {
+        socket.set_send_buffer_size(sbs)?;
+    }
+    if let Some(rbs) = options.recv_buffer_size {
+        socket.set_recv_buffer_size(rbs)?;
+    }
+    if let Some(nodelay) = options.nodelay {
+        socket.set_nodelay(nodelay)?;
+    }
+    if let Some(keepalive) = options.keepalive {
+        socket.set_nodelay(keepalive)?;
     }
 
     socket.bind(a)?;
@@ -113,13 +67,7 @@ pub async fn stream(
         IpAddr::V6(Ipv6Addr::UNSPECIFIED)
     };
 
-    tcpsocket(
-        SocketAddr::new(ip, 0),
-        a.port() == 53 || a.port() == 853,
-        sockopt,
-    )?
-    .connect(a)
-    .await
+    tcpsocket(SocketAddr::new(ip, 0), sockopt)?.connect(a).await
 }
 
 #[inline(always)]

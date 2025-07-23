@@ -32,7 +32,10 @@ pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
 
 // sleep after result
 #[inline(always)]
-pub async fn delay<F, T>(dur: std::time::Duration, future: F) -> T where F: Future<Output = T> {
+pub async fn delay<F, T>(dur: std::time::Duration, future: F) -> T
+where
+    F: Future<Output = T>,
+{
     let operation = future.await;
     tokio::time::sleep(dur).await;
     operation

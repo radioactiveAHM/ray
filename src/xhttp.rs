@@ -205,18 +205,27 @@ async fn h2c(
 }
 
 #[inline(always)]
-fn gen_http_resp(xhttp_options: &'static crate::config::Xhttp, get: bool) -> Result<http::Response<()>, Box<dyn std::error::Error>> {
+fn gen_http_resp(
+    xhttp_options: &'static crate::config::Xhttp,
+    get: bool,
+) -> Result<http::Response<()>, Box<dyn std::error::Error>> {
     let mut resp = http::Response::builder()
         .status(200)
         .version(http::Version::HTTP_2)
         .body(())?;
     if get {
         for head in &xhttp_options.get_resp_headers {
-            resp.headers_mut().insert(head.0.as_str(), http::header::HeaderValue::from_str(head.1.as_str())?);
+            resp.headers_mut().insert(
+                head.0.as_str(),
+                http::header::HeaderValue::from_str(head.1.as_str())?,
+            );
         }
     } else {
         for head in &xhttp_options.post_resp_headers {
-            resp.headers_mut().insert(head.0.as_str(), http::header::HeaderValue::from_str(head.1.as_str())?);
+            resp.headers_mut().insert(
+                head.0.as_str(),
+                http::header::HeaderValue::from_str(head.1.as_str())?,
+            );
         }
     };
 
@@ -235,7 +244,9 @@ async fn handle_get(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Match path
     let cid = get_cid(h2_stream.0.uri().path(), true)?;
-    let mut h2_w = h2_stream.1.send_response(gen_http_resp(xhttp_options, true)?, false)?;
+    let mut h2_w = h2_stream
+        .1
+        .send_response(gen_http_resp(xhttp_options, true)?, false)?;
     let conn = wait_for_init(&cm, &cid, xhttp_options).await?;
     if conn.io.is_tcp() {
         let io = conn.io.get_tcp();
@@ -403,15 +414,13 @@ async fn handle_post(
                     }
                     cm.write().await.insert(
                         cid,
-                        Arc::new(
-                            XHttpConnection {
-                                io: IoType::Udp(IoUdp {
-                                    udp,
-                                    buff: Mutex::new(Vec::with_capacity(1024 * 8)),
-                                }),
-                                sec: RwLock::new(1),
-                            }
-                        )
+                        Arc::new(XHttpConnection {
+                            io: IoType::Udp(IoUdp {
+                                udp,
+                                buff: Mutex::new(Vec::with_capacity(1024 * 8)),
+                            }),
+                            sec: RwLock::new(1),
+                        }),
                     );
                 }
                 crate::vless::SocketType::TCP => {
@@ -422,15 +431,13 @@ async fn handle_post(
                     let (r, w) = tokio::io::split(tcp);
                     cm.write().await.insert(
                         cid,
-                        Arc::new(
-                            XHttpConnection {
-                                io: IoType::Tcp(IoTcp {
-                                    r: Mutex::new(r),
-                                    w: Mutex::new(w),
-                                }),
-                                sec: RwLock::new(1),
-                            }
-                        )
+                        Arc::new(XHttpConnection {
+                            io: IoType::Tcp(IoTcp {
+                                r: Mutex::new(r),
+                                w: Mutex::new(w),
+                            }),
+                            sec: RwLock::new(1),
+                        }),
                     );
                 }
             };
@@ -481,9 +488,8 @@ async fn handle_post(
                     if udp_buff.len() < 3 {
                         break;
                     }
-                    let psize =
-                        crate::utils::convert_two_u8s_to_u16_be([udp_buff[0], udp_buff[1]])
-                            as usize;
+                    let psize = crate::utils::convert_two_u8s_to_u16_be([udp_buff[0], udp_buff[1]])
+                        as usize;
                     if psize == 0 || psize > udp_buff.len() - 2 {
                         break;
                     }
@@ -493,7 +499,9 @@ async fn handle_post(
             }
         }
     }
-    h2_stream.1.send_response(gen_http_resp(xhttp_options, false)?, true)?;
+    h2_stream
+        .1
+        .send_response(gen_http_resp(xhttp_options, false)?, true)?;
     Ok(())
 }
 

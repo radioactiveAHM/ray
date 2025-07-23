@@ -1,6 +1,5 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    pin::Pin,
     sync::Arc,
 };
 
@@ -118,7 +117,15 @@ async fn async_main(c: config::Config) {
                 // xhttp handle
                 // only with tls
                 if let Some(xhttp_option) = inbound.transporter.is_xhttp() {
-                    xhttp::xhttp(acceptor, tcp, config, cresolver, inbound.sockopt.clone(), xhttp_option).await;
+                    xhttp::xhttp(
+                        acceptor,
+                        tcp,
+                        config,
+                        cresolver,
+                        inbound.sockopt.clone(),
+                        xhttp_option,
+                    )
+                    .await;
                     return;
                 }
 
@@ -291,7 +298,7 @@ where
                 &config.blacklist,
                 config.udp_proxy_buffer_size.unwrap_or(8),
                 sockopt,
-                peer_addr.ip()
+                peer_addr.ip(),
             )
             .await
         }
@@ -325,31 +332,38 @@ where
     }
     drop(payload);
 
-    let mut tpbs = config.tcp_proxy_buffer_size.unwrap_or(8);
-    if target_addr.port() == 53 || target_addr.port() == 853 {
-        tpbs = 8;
-    }
+    let tpbs = config.tcp_proxy_buffer_size.unwrap_or(8);
 
     let _ = stream.write(&[0, 0]).await?;
 
-    let mut tcpwriter_client = tcp::TcpWriterGeneric {
-        hr: Pin::new(unsafe_refmut(&stream))
-    };
-
-    let mut tcpwriter_target = tcp::TcpWriterGeneric {
-        hr: Pin::new(unsafe_refmut(&target))
-    };
-
     if let Err(e) = tokio::try_join!(
-        utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
-            pipe::copy(unsafe_refmut(&stream), &mut tcpwriter_target, tpbs, config.tcp_idle_timeout).await
-        }),
-        utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
-            pipe::copy(unsafe_refmut(&target), &mut tcpwriter_client, tpbs, config.tcp_idle_timeout).await
-        })
+        utils::delay(
+            std::time::Duration::from_millis(config.tcp_close_delay),
+            async {
+                pipe::copy(
+                    unsafe_refmut(&stream),
+                    unsafe_refmut(&target),
+                    tpbs,
+                    config.tcp_idle_timeout,
+                )
+                .await
+            }
+        ),
+        utils::delay(
+            std::time::Duration::from_millis(config.tcp_close_delay),
+            async {
+                pipe::copy(
+                    unsafe_refmut(&target),
+                    unsafe_refmut(&stream),
+                    tpbs,
+                    config.tcp_idle_timeout,
+                )
+                .await
+            }
+        )
     ) {
-        let _ = tcpwriter_target.shutdown().await;
-        let _ = tcpwriter_client.shutdown().await;
+        let _ = stream.shutdown().await;
+        let _ = target.shutdown().await;
         return Err(e);
     }
     Ok(())
@@ -394,18 +408,14 @@ where
     }
     drop(payload);
 
-    let buf_size = if target.port() == 53 || target.port() == 853 {
-        // DNS does not require big buffer size
-        8
-    } else {
-        config.udp_proxy_buffer_size.unwrap_or(8)
-    };
+    let buf_size = config.udp_proxy_buffer_size.unwrap_or(8);
 
     // proxy UDP
     if let Err(e) = tokio::try_join!(
-        utils::delay(std::time::Duration::from_millis(config.tcp_close_delay), async {
-            udputils::copy_t2u(&udp, unsafe_refmut(&stream), buf_size, uit()).await
-        }),
+        utils::delay(
+            std::time::Duration::from_millis(config.tcp_close_delay),
+            async { udputils::copy_t2u(&udp, unsafe_refmut(&stream), buf_size, uit()).await }
+        ),
         udputils::copy_u2t(&udp, unsafe_refmut(&stream))
     ) {
         let _ = stream.shutdown().await;
