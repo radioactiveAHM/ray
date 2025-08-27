@@ -102,9 +102,8 @@ where
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
                 if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err()
-                    && crate::log()
                 {
-                    println!("Failed to set bind to device");
+                    log::error!("Failed to set bind to device");
                 };
             }
         }
@@ -268,7 +267,7 @@ where
         if internal_buf.len() >= 1024 * 16 {
             return Err(crate::verror::VError::MuxBufferOverflow.into());
         }
-        crate::pipe::read(&mut r, &mut wrapper, crate::uit()).await?;
+        crate::pipe::read_timeout(&mut r, &mut wrapper, crate::uit()).await?;
         internal_buf.extend_from_slice(wrapper.filled());
         wrapper.clear();
         loop {

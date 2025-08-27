@@ -77,7 +77,6 @@ async fn parse_target(
     }
 }
 
-#[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum SocketType {
     TCP,
@@ -94,7 +93,6 @@ impl Display for SocketType {
     }
 }
 
-#[derive(Debug)]
 pub struct Vless {
     pub uuid: [u8; 16],
     pub rt: SocketType,

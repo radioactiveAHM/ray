@@ -124,5 +124,5 @@ where
         b: Vec::with_capacity(buf_size * 1024), // buf_size unit is kb
     };
 
-    crate::pipe::copy(r, &mut uw, buf_size, timeout_dur).await
+    crate::pipe::copy_timeout(r, &mut uw, buf_size, timeout_dur).await
 }

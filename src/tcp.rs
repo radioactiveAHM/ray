@@ -17,19 +17,19 @@ pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::
     #[cfg(target_os = "linux")]
     {
         if let Some(mss) = sockopt.mss {
-            if tcp_options::set_tcp_mss(&socket, mss).is_err() && crate::log() {
-                println!("Failed to set tcp mss");
+            if tcp_options::set_tcp_mss(&socket, mss).is_err() {
+                log::error!("Failed to set tcp mss");
             };
         }
         if let Some(congestion) = &sockopt.congestion {
-            if tcp_options::set_tcp_congestion(&socket, congestion).is_err() && crate::log() {
-                println!("Failed to set tcp congestion");
+            if tcp_options::set_tcp_congestion(&socket, congestion).is_err() {
+                log::error!("Failed to set tcp congestion");
             };
         }
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
-                if tcp_options::set_tcp_bind_device(&socket, &interface).is_err() && crate::log() {
-                    println!("Failed to set bind to device");
+                if tcp_options::set_tcp_bind_device(&socket, &interface).is_err() {
+                    log::error!("Failed to set bind to device");
                 };
             }
         }
@@ -89,12 +89,10 @@ pub fn get_interface(ipv4: bool, interface: &str) -> IpAddr {
     });
 
     if ip.is_none() {
-        if crate::log() {
-            println!(
-                "interface {} not found or interface does not provide IPv6",
-                &interface
-            );
-        }
+        log::error!(
+            "interface {} not found or interface does not provide IPv6",
+            &interface
+        );
         // fallback
         if ipv4 {
             return IpAddr::V4(Ipv4Addr::UNSPECIFIED);

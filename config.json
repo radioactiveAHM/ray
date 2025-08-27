@@ -1,9 +1,10 @@
 {
-	"log": false,
-	"thread_stack_size": null,
+	"log": {
+		"level": "error",
+		"file": "l.log"
+	},
 	"tcp_proxy_buffer_size": null,
 	"udp_proxy_buffer_size": null,
-	"tcp_close_delay": 2000,
 	"tcp_idle_timeout": 150,
 	"udp_idle_timeout": 90,
 	"users": [
@@ -32,8 +33,8 @@
 		}
 	],
 	"resolver": {
-		"address": null,
-		"ip_port": "8.8.8.8:53",
+		"resolver": null,
+		"remote": "1.1.1.1:53",
 		"mode": "IPv4"
 	},
 	"tcp_socket_options": {

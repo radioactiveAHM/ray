@@ -10,12 +10,10 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     if let Ok(http) = core::str::from_utf8(buff) {
-        // if there is no host
-        // i'm too lazy to parse http headers :D
-        if let Some(host) = &chttp.host {
-            if !http.contains(host.as_str()) {
-                return Err(crate::verror::VError::TransporterError.into());
-            }
+        if let Some(host) = &chttp.host
+            && !http.contains(host.as_str())
+        {
+            return Err(crate::verror::VError::TransporterError.into());
         }
 
         if let Some(head) = http.lines().next() {
@@ -47,10 +45,10 @@ where
     if let Ok(http) = core::str::from_utf8(buff) {
         // if there is no host
         // i'm too lazy to parse http headers :D
-        if let Some(host) = &chttp.host {
-            if !http.contains(host.as_str()) {
-                return Err(crate::verror::VError::TransporterError.into());
-            }
+        if let Some(host) = &chttp.host
+            && !http.contains(host.as_str())
+        {
+            return Err(crate::verror::VError::TransporterError.into());
         }
         if let Some(head) = http.lines().next() {
             if head != format!("{} {} HTTP/1.1", chttp.method, chttp.path) {
@@ -209,11 +207,9 @@ where
             .await
         }
     } {
-        if crate::log() {
-            println!("{peer_addr}: {e}")
-        }
-    } else if crate::log() {
-        println!("{peer_addr}: closed connection")
+        log::error!("{peer_addr}: {e}");
+    } else {
+        log::error!("{peer_addr}: closed connection");
     }
 
     Ok(())

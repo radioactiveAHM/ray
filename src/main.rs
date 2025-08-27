@@ -23,9 +23,7 @@ mod udputils;
 mod utils;
 mod verror;
 mod vless;
-mod xhttp;
 
-static mut LOG: bool = false;
 static mut UIT: u64 = 15;
 static mut RESOLVER_MODE: config::ResolvingMode = config::ResolvingMode::IPv4;
 static mut TSO: config::TcpSocketOptions = config::TcpSocketOptions {
@@ -34,10 +32,6 @@ static mut TSO: config::TcpSocketOptions = config::TcpSocketOptions {
     nodelay: None,
     keepalive: None,
 };
-
-fn log() -> bool {
-    unsafe { LOG }
-}
 
 fn uit() -> u64 {
     unsafe { UIT }
@@ -51,40 +45,43 @@ fn tso() -> config::TcpSocketOptions {
     unsafe { TSO }
 }
 
-fn main() {
-    let c = config::load_config();
-    if let Some(size) = c.thread_stack_size {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .thread_stack_size(size)
-            .build()
-            .unwrap()
-            .block_on(async {
-                async_main(c).await;
-            });
-    } else {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                async_main(c).await;
-            });
-    }
-}
-
-async fn async_main(c: config::Config) {
+#[tokio::main(flavor = "multi_thread")]
+async fn main() {
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
+
     // Load config and convert to &'static
+    let c = config::load_config();
     let config: &'static config::Config = utils::unsafe_staticref(&c);
+
+    // Log panic info
+    std::panic::set_hook(Box::new(|message| {
+        log::error!("{message}");
+    }));
+
+    {
+        let mut logger = env_logger::builder();
+        #[cfg(not(debug_assertions))]
+        {
+            if let Some(file) = &config.log.file {
+                logger.target(env_logger::Target::Pipe(Box::new(
+                    std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(file)
+                        .unwrap(),
+                )));
+            }
+        }
+        // Level order: Error, Warn, Info, Debug, Trace
+        logger.filter_level(config.log.level.convert()).init();
+    }
 
     let resolver = resolver::generate_resolver(&config.resolver);
     let cresolver = utils::unsafe_staticref(&resolver);
 
     unsafe {
-        LOG = config.log;
         UIT = config.udp_idle_timeout;
         RESOLVER_MODE = config.resolver.mode;
         TSO = config.tcp_socket_options
@@ -114,21 +111,6 @@ async fn async_main(c: config::Config) {
                 c.max_fragment_size = inbound.tls.max_fragment_size;
                 let acceptor = TlsAcceptor::from(Arc::new(c));
 
-                // xhttp handle
-                // only with tls
-                if let Some(xhttp_option) = inbound.transporter.is_xhttp() {
-                    xhttp::xhttp(
-                        acceptor,
-                        tcp,
-                        config,
-                        cresolver,
-                        inbound.sockopt.clone(),
-                        xhttp_option,
-                    )
-                    .await;
-                    return;
-                }
-
                 loop {
                     match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
                         Ok(tc) => {
@@ -142,16 +124,12 @@ async fn async_main(c: config::Config) {
                                 )
                                 .await
                                 {
-                                    if log() {
-                                        println!("TLS: {e}")
-                                    }
+                                    log::error!("TLS: {e}")
                                 }
                             });
                         }
                         Err(e) => {
-                            if log() {
-                                println!("TLS: {e}")
-                            }
+                            log::error!("TLS: {e}")
                         }
                     }
                 }
@@ -160,8 +138,8 @@ async fn async_main(c: config::Config) {
                 loop {
                     if let Ok((stream, _)) = tcp.accept().await {
                         tokio::spawn(async move {
-                            if let Ok(peer_addr) = stream.peer_addr() {
-                                if let Err(e) = stream_handler(
+                            if let Ok(peer_addr) = stream.peer_addr()
+                                && let Err(e) = stream_handler(
                                     stream,
                                     config,
                                     peer_addr,
@@ -170,11 +148,8 @@ async fn async_main(c: config::Config) {
                                     inbound.sockopt.clone(),
                                 )
                                 .await
-                                {
-                                    if log() {
-                                        println!("NOTLS: {e}");
-                                    }
-                                }
+                            {
+                                log::error!("NOTLS: {e}")
                             }
                         });
                     }
@@ -224,7 +199,6 @@ where
 
     // Handle transporters
     match &transport {
-        config::Transporter::XHttp(_) => return Ok(()),
         config::Transporter::TCP => {
             size = stream.read(&mut buff).await?;
         }
@@ -303,11 +277,9 @@ where
             .await
         }
     } {
-        if log() {
-            println!("{peer_addr}: {e}")
-        }
-    } else if log() {
-        println!("{peer_addr}: closed connection")
+        log::error!("{peer_addr}: {e}");
+    } else {
+        log::error!("{peer_addr}: closed connection")
     }
 
     Ok(())
@@ -336,37 +308,38 @@ where
 
     let _ = stream.write(&[0, 0]).await?;
 
-    if let Err(e) = tokio::try_join!(
-        utils::delay(
-            std::time::Duration::from_millis(config.tcp_close_delay),
+    let err: tokio::io::Error;
+    loop {
+        let operation = tokio::time::timeout(
+            std::time::Duration::from_secs(config.tcp_idle_timeout),
             async {
-                pipe::copy(
-                    unsafe_refmut(&stream),
-                    unsafe_refmut(&target),
-                    tpbs,
-                    config.tcp_idle_timeout,
-                )
-                .await
-            }
-        ),
-        utils::delay(
-            std::time::Duration::from_millis(config.tcp_close_delay),
-            async {
-                pipe::copy(
-                    unsafe_refmut(&target),
-                    unsafe_refmut(&stream),
-                    tpbs,
-                    config.tcp_idle_timeout,
-                )
-                .await
-            }
+                tokio::select! {
+                    piping = pipe::copy(unsafe_refmut(&stream), unsafe_refmut(&target), tpbs) => {
+                        piping
+                    },
+                    piping = pipe::copy(unsafe_refmut(&target), unsafe_refmut(&stream), tpbs) => {
+                        piping
+                    },
+                }
+            },
         )
-    ) {
-        let _ = stream.shutdown().await;
-        let _ = target.shutdown().await;
-        return Err(e);
+        .await;
+
+        match operation {
+            Err(_) => {
+                err = tokio::io::Error::other("Timeout");
+                break;
+            }
+            Ok(Err(e)) => {
+                err = e;
+                break;
+            }
+            _ => (),
+        }
     }
-    Ok(())
+    let _ = stream.shutdown().await;
+    let _ = target.shutdown().await;
+    Err(err)
 }
 
 #[inline(never)]
@@ -393,9 +366,9 @@ where
     {
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
-                if tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() && crate::log()
+                if tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err()
                 {
-                    println!("Failed to set bind to device");
+                    log::error!("Failed to set bind to device")
                 };
             }
         }
@@ -408,14 +381,9 @@ where
     }
     drop(payload);
 
-    let buf_size = config.udp_proxy_buffer_size.unwrap_or(8);
-
     // proxy UDP
     if let Err(e) = tokio::try_join!(
-        utils::delay(
-            std::time::Duration::from_millis(config.tcp_close_delay),
-            async { udputils::copy_t2u(&udp, unsafe_refmut(&stream), buf_size, uit()).await }
-        ),
+        udputils::copy_t2u(&udp, unsafe_refmut(&stream), config.udp_proxy_buffer_size.unwrap_or(8), config.udp_idle_timeout),
         udputils::copy_u2t(&udp, unsafe_refmut(&stream))
     ) {
         let _ = stream.shutdown().await;

@@ -13,40 +13,46 @@ pub fn generate_resolver(
         hickory_resolver::proto::runtime::TokioRuntimeProvider,
     >,
 > {
-    let protocol = if let Some(addr) = &rc.address {
-        let parts: Vec<&str> = addr.split("://").collect(); // [0] scheme [1] domain
-        match parts[0] {
-            "https" => NameServerConfigGroup::from_ips_https(
-                &[rc.ip_port.ip()],
-                rc.ip_port.port(),
-                parts[1].to_string(),
-                true,
-            ),
-            "h3" => NameServerConfigGroup::from_ips_h3(
-                &[rc.ip_port.ip()],
-                rc.ip_port.port(),
-                parts[1].to_string(),
-                true,
-            ),
-            "quic" => NameServerConfigGroup::from_ips_quic(
-                &[rc.ip_port.ip()],
-                rc.ip_port.port(),
-                parts[1].to_string(),
-                true,
-            ),
-            "tls" => NameServerConfigGroup::from_ips_tls(
-                &[rc.ip_port.ip()],
-                rc.ip_port.port(),
-                parts[1].to_string(),
-                true,
-            ),
-            "udp" => {
-                NameServerConfigGroup::from_ips_clear(&[rc.ip_port.ip()], rc.ip_port.port(), true)
+    let protocol = if let Some(addr) = &rc.resolver {
+        let mut parts = addr.split("://");
+        if let Some(scheme) = parts.next()
+            && let Some(domain) = parts.next()
+        {
+            match scheme {
+                "https" => NameServerConfigGroup::from_ips_https(
+                    &[rc.remote.ip()],
+                    rc.remote.port(),
+                    domain.to_string(),
+                    true,
+                ),
+                "h3" => NameServerConfigGroup::from_ips_h3(
+                    &[rc.remote.ip()],
+                    rc.remote.port(),
+                    domain.to_string(),
+                    true,
+                ),
+                "quic" => NameServerConfigGroup::from_ips_quic(
+                    &[rc.remote.ip()],
+                    rc.remote.port(),
+                    domain.to_string(),
+                    true,
+                ),
+                "tls" => NameServerConfigGroup::from_ips_tls(
+                    &[rc.remote.ip()],
+                    rc.remote.port(),
+                    domain.to_string(),
+                    true,
+                ),
+                "udp" => {
+                    NameServerConfigGroup::from_ips_clear(&[rc.remote.ip()], rc.remote.port(), true)
+                }
+                _ => panic!("Dns protocol not supported"),
             }
-            _ => panic!("Dns protocol not supported"),
+        } else {
+            panic!("invalid resolver configuration")
         }
     } else {
-        NameServerConfigGroup::from_ips_clear(&[rc.ip_port.ip()], rc.ip_port.port(), true)
+        NameServerConfigGroup::from_ips_clear(&[rc.remote.ip()], rc.remote.port(), true)
     };
 
     Resolver::builder_with_config(
@@ -69,17 +75,13 @@ pub async fn lookup(
         if let Ok(record) = r.ipv4_lookup(d).await {
             record.iter().next().map(|a| IpAddr::V4(a.0))
         } else {
-            if crate::log() {
-                println!("Failed to resolve {d}");
-            }
+            log::error!("Failed to resolve {d}");
             None
         }
     } else if let Ok(record) = r.ipv6_lookup(d).await {
         record.iter().next().map(|aaaa| IpAddr::V6(aaaa.0))
     } else {
-        if crate::log() {
-            println!("Failed to resolve {d}");
-        }
+        log::error!("Failed to resolve {d}");
         None
     }
 }
@@ -100,9 +102,7 @@ pub async fn resolve(
             } else if let Some(ip) = lookup(resolver, domain, false).await {
                 Ok(SocketAddr::new(ip, port))
             } else {
-                if crate::log() {
-                    println!("No host for {domain}");
-                }
+                log::error!("No host for {domain}");
                 Err(VError::NoHost)
             }
         }
@@ -112,9 +112,7 @@ pub async fn resolve(
             } else if let Some(ip) = lookup(resolver, domain, true).await {
                 Ok(SocketAddr::new(ip, port))
             } else {
-                if crate::log() {
-                    println!("No host for {domain}");
-                }
+                log::error!("No host for {domain}");
                 Err(VError::NoHost)
             }
         }

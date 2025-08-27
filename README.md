@@ -7,8 +7,6 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 - [x] HTTP
 - [x] HTTP Upgrade
 - [x] WS (WebSocket)
-- [ ] XHTTP (Packet-up H2)
-- [ ] XHTTP (Packet-up HTTP/1.1)
 
 ## Vless Request Commands
 
@@ -24,8 +22,10 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 
 ```json
 {
-    "log": false, // Enable logging. Disable for maximum performance
-    "thread_stack_size": null, // The stack size (in bytes) for worker threads. The default stack size for spawned threads is 2 MiB. The actual stack size may be greater than this value if the platform specifies minimal stack size.
+    "log": {
+        "level": "error",
+        "file": ".log"
+    },
     "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
@@ -57,8 +57,8 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
         }
     ],
     "resolver": { // Built-in domain resolver supporting multiple protocols: udp, https, h3, tls, and quic
-        "address": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google"
-        "ip_port": "8.8.8.8:53", // Standard port: UDP (53), HTTPS (443), TLS/QUIC (853)
+        "resolver": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google"
+        "remote": "8.8.8.8:53", // Standard port: UDP (53), HTTPS (443), TLS/QUIC (853)
         "mode": "IPv4" // Options: 'IPv4' prioritizes IPv4 over IPv6; 'IPv6' prioritizes IPv6 over IPv4
     },
     "tcp_socket_options": {

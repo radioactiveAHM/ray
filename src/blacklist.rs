@@ -9,9 +9,7 @@ pub fn containing(
             .iter()
             .any(|blackdomain| blackdomain.as_str() == domain)
         {
-            if crate::log() {
-                println!("Domain {} in {} blacklist blocked", domain, list.name);
-            }
+            log::trace!("Domain {} in {} blacklist blocked", domain, list.name);
             return Err(crate::verror::VError::DomainInBlacklist);
         }
     }

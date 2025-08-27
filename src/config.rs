@@ -39,46 +39,12 @@ pub struct Ws {
 }
 
 #[derive(serde::Deserialize, Clone)]
-pub struct Xhttp {
-    // H2
-    pub initial_connection_window_size: Option<u32>,
-    pub initial_window_size: Option<u32>,
-    pub target_window_size: Option<u32>,
-    pub max_concurrent_streams: Option<u32>,
-    pub max_frame_size: Option<u32>,
-    pub max_send_buffer_size: Option<usize>,
-    pub reset_stream_duration: Option<u64>,
-
-    pub recv_data_frame_timeout: u64,
-    pub tcp_buffer_size: usize,
-
-    pub wait_for_sec_timeout: u64,
-    pub wait_for_sec_interval: u64,
-
-    pub wait_for_init_timeout: u64,
-    pub wait_for_init_interval: u64,
-
-    pub get_resp_headers: Vec<(String, String)>,
-    pub post_resp_headers: Vec<(String, String)>,
-}
-
-#[derive(serde::Deserialize, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Transporter {
     TCP,
     HTTP(Http),
     HttpUpgrade(Http),
     WS(Ws),
-    XHttp(Xhttp),
-}
-
-impl Transporter {
-    pub fn is_xhttp(&self) -> Option<Xhttp> {
-        match self {
-            Self::XHttp(xhttp) => Some(xhttp.clone()),
-            _ => None,
-        }
-    }
 }
 
 #[derive(serde::Deserialize)]
@@ -96,8 +62,8 @@ pub enum ResolvingMode {
 
 #[derive(serde::Deserialize, Clone)]
 pub struct Resolver {
-    pub address: Option<String>,
-    pub ip_port: SocketAddr,
+    pub resolver: Option<String>,
+    pub remote: SocketAddr,
     pub mode: ResolvingMode,
 }
 
@@ -125,12 +91,41 @@ pub struct Inbound {
 }
 
 #[derive(serde::Deserialize)]
+#[allow(non_camel_case_types)]
+pub enum LevelFilter {
+    off,
+    error,
+    warn,
+    info,
+    debug,
+    trace,
+}
+
+impl LevelFilter {
+    pub fn convert(&self) -> log::LevelFilter {
+        match self {
+            Self::off => log::LevelFilter::Off,
+            Self::error => log::LevelFilter::Error,
+            Self::warn => log::LevelFilter::Warn,
+            Self::info => log::LevelFilter::Info,
+            Self::debug => log::LevelFilter::Debug,
+            Self::trace => log::LevelFilter::Trace,
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[allow(dead_code)]
+pub struct Log {
+    pub level: LevelFilter,
+    pub file: Option<std::path::PathBuf>,
+}
+
+#[derive(serde::Deserialize)]
 pub struct Config {
-    pub log: bool,
-    pub thread_stack_size: Option<usize>,
+    pub log: Log,
     pub tcp_proxy_buffer_size: Option<usize>,
     pub udp_proxy_buffer_size: Option<usize>,
-    pub tcp_close_delay: u64,
     pub tcp_idle_timeout: u64,
     pub udp_idle_timeout: u64,
     pub users: Vec<User>,
@@ -141,15 +136,14 @@ pub struct Config {
 }
 
 pub fn load_config() -> Config {
-    if let Ok(mut p) = std::env::current_exe() {
-        if p.pop() {
-            let c = p.join("config.json");
-            if c.exists() {
-                let config_file = std::fs::read(c).expect("Can not read config file");
-                let conf: Config =
-                    serde_json::from_slice(&config_file).expect("Malformed config file");
-                return conf;
-            }
+    if let Ok(mut p) = std::env::current_exe()
+        && p.pop()
+    {
+        let c = p.join("config.json");
+        if c.exists() {
+            let config_file = std::fs::read(c).expect("Can not read config file");
+            let conf: Config = serde_json::from_slice(&config_file).expect("Malformed config file");
+            return conf;
         }
     }
     let config_file = std::fs::read("config.json").expect("Can not read config file");

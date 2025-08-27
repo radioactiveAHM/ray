@@ -4,7 +4,47 @@ use tokio::{
 };
 
 #[inline(always)]
-pub async fn copy<R, W>(
+pub async fn copy<R, W>(mut r: R, w: &mut W, buff_size: usize) -> tokio::io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWriteExt + Unpin,
+{
+    let mut buf = vec![0; 1024 * buff_size];
+    let mut pinned: std::pin::Pin<&mut R> = std::pin::Pin::new(&mut r);
+    let mut wrapper: ReadBuf<'_> = ReadBuf::new(&mut buf);
+    loop {
+        tokio::task::yield_now().await;
+        read(&mut pinned, &mut wrapper).await?;
+        let _ = w.write(wrapper.filled()).await?;
+        let _ = w.flush().await;
+        wrapper.clear();
+    }
+}
+
+#[inline(always)]
+pub async fn read<R>(
+    pinned: &mut std::pin::Pin<&mut R>,
+    wrapper: &mut ReadBuf<'_>,
+) -> tokio::io::Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    std::future::poll_fn(|cx| match pinned.as_mut().poll_read(cx, wrapper) {
+        std::task::Poll::Pending => std::task::Poll::Pending,
+        std::task::Poll::Ready(Ok(_)) => {
+            if wrapper.filled().is_empty() {
+                std::task::Poll::Ready(Err(tokio::io::Error::other("Pipe read EOF")))
+            } else {
+                std::task::Poll::Ready(Ok(()))
+            }
+        }
+        std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
+    })
+    .await
+}
+
+#[inline(always)]
+pub async fn copy_timeout<R, W>(
     mut r: R,
     w: &mut W,
     buff_size: usize,
@@ -18,7 +58,8 @@ where
     let mut pinned: std::pin::Pin<&mut R> = std::pin::Pin::new(&mut r);
     let mut wrapper: ReadBuf<'_> = ReadBuf::new(&mut buf);
     loop {
-        read(&mut pinned, &mut wrapper, timeout_dur).await?;
+        tokio::task::yield_now().await;
+        read_timeout(&mut pinned, &mut wrapper, timeout_dur).await?;
         let _ = w.write(wrapper.filled()).await?;
         let _ = w.flush().await;
         wrapper.clear();
@@ -26,7 +67,7 @@ where
 }
 
 #[inline(always)]
-pub async fn read<R>(
+pub async fn read_timeout<R>(
     pinned: &mut std::pin::Pin<&mut R>,
     wrapper: &mut ReadBuf<'_>,
     timeout_dur: u64,
