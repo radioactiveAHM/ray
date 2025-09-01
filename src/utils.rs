@@ -29,3 +29,22 @@ pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
         .position(|pre| pre == find)
         .map(|a| (a, a + find.len()))
 }
+
+/// Short hand of `std::collections::VecDeque<u8>` to use for buffering
+pub struct DeqBuffer{
+    inner_buf: std::collections::VecDeque<u8>
+}
+impl DeqBuffer {
+    pub fn new(capacity: usize)->Self{
+        Self { inner_buf: std::collections::VecDeque::with_capacity(capacity) }
+    }
+    pub fn write(&mut self, buf: &[u8]) {
+        self.inner_buf.extend(buf);
+    }
+    pub fn slice(&self) -> &[u8] {
+        self.inner_buf.as_slices().0
+    }
+    pub fn remove(&mut self, len: usize) {
+        self.inner_buf.drain(..len);
+    } 
+}
