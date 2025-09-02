@@ -35,7 +35,7 @@ pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::
         }
     }
 
-    let options = crate::tso();
+    let options = crate::CONFIG.tcp_socket_options;
     if let Some(sbs) = options.send_buffer_size {
         socket.set_send_buffer_size(sbs)?;
     }

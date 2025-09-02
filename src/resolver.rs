@@ -20,39 +20,41 @@ pub fn generate_resolver(
         {
             match scheme {
                 "https" => NameServerConfigGroup::from_ips_https(
-                    &[rc.remote.ip()],
-                    rc.remote.port(),
+                    &rc.ips,
+                    rc.port,
                     domain.to_string(),
-                    true,
+                    rc.trust_negative_responses,
                 ),
                 "h3" => NameServerConfigGroup::from_ips_h3(
-                    &[rc.remote.ip()],
-                    rc.remote.port(),
+                    &rc.ips,
+                    rc.port,
                     domain.to_string(),
-                    true,
+                    rc.trust_negative_responses,
                 ),
                 "quic" => NameServerConfigGroup::from_ips_quic(
-                    &[rc.remote.ip()],
-                    rc.remote.port(),
+                    &rc.ips,
+                    rc.port,
                     domain.to_string(),
-                    true,
+                    rc.trust_negative_responses,
                 ),
                 "tls" => NameServerConfigGroup::from_ips_tls(
-                    &[rc.remote.ip()],
-                    rc.remote.port(),
+                    &rc.ips,
+                    rc.port,
                     domain.to_string(),
-                    true,
+                    rc.trust_negative_responses,
                 ),
-                "udp" => {
-                    NameServerConfigGroup::from_ips_clear(&[rc.remote.ip()], rc.remote.port(), true)
-                }
+                "udp" => NameServerConfigGroup::from_ips_clear(
+                    &rc.ips,
+                    rc.port,
+                    rc.trust_negative_responses,
+                ),
                 _ => panic!("Dns protocol not supported"),
             }
         } else {
             panic!("invalid resolver configuration")
         }
     } else {
-        NameServerConfigGroup::from_ips_clear(&[rc.remote.ip()], rc.remote.port(), true)
+        NameServerConfigGroup::from_ips_clear(&rc.ips, rc.port, rc.trust_negative_responses)
     };
 
     Resolver::builder_with_config(
@@ -95,7 +97,7 @@ pub async fn resolve(
     domain: &str,
     port: u16,
 ) -> Result<SocketAddr, VError> {
-    match crate::resolver_mode() {
+    match crate::CONFIG.resolver.mode {
         crate::config::ResolvingMode::IPv4 => {
             if let Some(ip) = lookup(resolver, domain, true).await {
                 Ok(SocketAddr::new(ip, port))

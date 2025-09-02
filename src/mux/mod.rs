@@ -3,12 +3,13 @@ use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     pin::Pin,
+    sync::Arc,
 };
 
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 
 use crate::{
-    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_refmut},
+    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
     verror::VError,
 };
 
@@ -19,12 +20,11 @@ use crate::{
 #[inline(always)]
 async fn parse_target(
     buff: &[u8],
-    resolver: &'static hickory_resolver::Resolver<
+    resolver: &hickory_resolver::Resolver<
         hickory_resolver::name_server::GenericConnector<
             hickory_resolver::proto::runtime::TokioRuntimeProvider,
         >,
     >,
-    blacklist: &Option<Vec<crate::config::BlackList>>,
     domain_map: RefCell<HashMap<IpAddr, String>>,
 ) -> Result<SocketAddr, VError> {
     let port = convert_two_u8s_to_u16_be([buff[5], buff[6]]);
@@ -35,7 +35,7 @@ async fn parse_target(
         ))),
         2 => {
             if let Ok(s) = core::str::from_utf8(&buff[9..buff[8] as usize + 9]) {
-                if let Some(bl) = blacklist {
+                if let Some(bl) = &crate::CONFIG.blacklist {
                     // if there is a blacklist
                     crate::blacklist::containing(bl, s)?;
                 }
@@ -69,16 +69,16 @@ async fn parse_target(
     }
 }
 
-#[inline(never)]
 pub async fn xudp<S>(
-    mut stream: S,
+    stream: S,
     mut buffer: Vec<u8>,
-    resolver: &'static hickory_resolver::Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+    resolver: Arc<
+        hickory_resolver::Resolver<
+            hickory_resolver::name_server::GenericConnector<
+                hickory_resolver::proto::runtime::TokioRuntimeProvider,
+            >,
         >,
     >,
-    blacklist: &Option<Vec<crate::config::BlackList>>,
     buf_size: usize,
     sockopt: crate::config::SockOpt,
     peer_ip: IpAddr,
@@ -101,8 +101,7 @@ where
     {
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
-                if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err()
-                {
+                if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() {
                     log::error!("Failed to set bind to device");
                 };
             }
@@ -110,19 +109,19 @@ where
     }
     let domain_map: RefCell<HashMap<IpAddr, String>> = RefCell::new(HashMap::new());
 
+    let (mut client_r, mut client_w) = tokio::io::split(stream);
     if let Err(e) = tokio::try_join!(
         copy_t2u(
             &udp,
-            unsafe_refmut(&stream),
+            &mut client_r,
             buffer,
             domain_map.clone(),
             buf_size,
-            resolver,
-            blacklist
+            resolver
         ),
-        copy_u2t(&udp, unsafe_refmut(&stream), domain_map.clone())
+        copy_u2t(&udp, &mut client_w, domain_map.clone())
     ) {
-        let _ = stream.shutdown().await;
+        let _ = client_w.shutdown().await;
         return Err(e);
     };
 
@@ -193,12 +192,13 @@ pub async fn copy_t2u<R>(
     b0: Vec<u8>,
     domain_map: RefCell<HashMap<IpAddr, String>>,
     buf_size: usize,
-    resolver: &'static hickory_resolver::Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+    resolver: Arc<
+        hickory_resolver::Resolver<
+            hickory_resolver::name_server::GenericConnector<
+                hickory_resolver::proto::runtime::TokioRuntimeProvider,
+            >,
         >,
     >,
-    blacklist: &Option<Vec<crate::config::BlackList>>,
 ) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin + Send,
@@ -206,7 +206,7 @@ where
     let mut b = Vec::with_capacity(buf_size * 1024);
     b.extend_from_slice(&b0);
 
-    handle_xudp_packets(Pin::new(&mut r), udp, b, domain_map, resolver, blacklist).await
+    handle_xudp_packets(Pin::new(&mut r), udp, b, domain_map, resolver).await
 }
 
 #[inline(always)]
@@ -215,12 +215,13 @@ async fn handle_xudp_packets<R>(
     udp: &tokio::net::UdpSocket,
     mut internal_buf: Vec<u8>,
     domain_map: RefCell<HashMap<IpAddr, String>>,
-    resolver: &'static hickory_resolver::Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+    resolver: Arc<
+        hickory_resolver::Resolver<
+            hickory_resolver::name_server::GenericConnector<
+                hickory_resolver::proto::runtime::TokioRuntimeProvider,
+            >,
         >,
     >,
-    blacklist: &Option<Vec<crate::config::BlackList>>,
 ) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin + Send,
@@ -232,8 +233,7 @@ where
             if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
                 // Stat: New Subjoin
                 let target =
-                    parse_target(&internal_buf[2..], resolver, blacklist, domain_map.clone())
-                        .await?;
+                    parse_target(&internal_buf[2..], &resolver, domain_map.clone()).await?;
                 let opt = internal_buf[5] == 1;
                 if opt {
                     let opt_len = convert_two_u8s_to_u16_be([
@@ -267,7 +267,7 @@ where
         if internal_buf.len() >= 1024 * 16 {
             return Err(crate::verror::VError::MuxBufferOverflow.into());
         }
-        crate::pipe::read_timeout(&mut r, &mut wrapper, crate::uit()).await?;
+        crate::pipe::read_timeout(&mut r, &mut wrapper, crate::CONFIG.udp_idle_timeout).await?;
         internal_buf.extend_from_slice(wrapper.filled());
         wrapper.clear();
         loop {
@@ -282,8 +282,7 @@ where
             if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
                 // Stat: New Subjoin and Keep frames
                 let target =
-                    parse_target(&internal_buf[2..], resolver, blacklist, domain_map.clone())
-                        .await?;
+                    parse_target(&internal_buf[2..], &resolver, domain_map.clone()).await?;
                 let opt = internal_buf[5] == 1;
                 if opt {
                     let opt_len = convert_two_u8s_to_u16_be([

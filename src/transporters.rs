@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
@@ -154,13 +156,13 @@ where
     }
 }
 
-#[inline(never)]
 pub async fn websocket_transport<S>(
     mut ws: tokio_websockets::WebSocketStream<S>,
-    config: &'static crate::config::Config,
-    resolver: &'static hickory_resolver::Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+    resolver: Arc<
+        hickory_resolver::Resolver<
+            hickory_resolver::name_server::GenericConnector<
+                hickory_resolver::proto::runtime::TokioRuntimeProvider,
+            >,
         >,
     >,
     peer_addr: std::net::SocketAddr,
@@ -172,13 +174,8 @@ where
     let vless: crate::vless::Vless;
     let mut payload = Vec::new();
     if let Some(Ok(vless_header_message)) = ws.next().await {
-        vless = crate::vless::Vless::new(
-            vless_header_message.as_payload(),
-            resolver,
-            &config.blacklist,
-        )
-        .await?;
-        if crate::auth::authenticate(config, &vless, peer_addr) {
+        vless = crate::vless::Vless::new(vless_header_message.as_payload(), &resolver).await?;
+        if crate::auth::authenticate(&vless, peer_addr) {
             return Err(crate::verror::VError::AuthenticationFailed.into());
         }
         payload.extend_from_slice(vless_header_message.as_payload());
@@ -188,19 +185,14 @@ where
 
     let wst = Wst { ws, closed: false };
     if let Err(e) = match vless.rt {
-        crate::vless::SocketType::TCP => {
-            crate::handle_tcp(vless, payload, wst, config, sockopt).await
-        }
-        crate::vless::SocketType::UDP => {
-            crate::handle_udp(vless, payload, wst, config, sockopt).await
-        }
+        crate::vless::SocketType::TCP => crate::handle_tcp(vless, payload, wst, sockopt).await,
+        crate::vless::SocketType::UDP => crate::handle_udp(vless, payload, wst, sockopt).await,
         crate::vless::SocketType::MUX => {
             crate::mux::xudp(
                 wst,
                 payload,
                 resolver,
-                &config.blacklist,
-                config.udp_proxy_buffer_size.unwrap_or(8),
+                crate::CONFIG.udp_proxy_buffer_size.unwrap_or(8),
                 sockopt,
                 peer_addr.ip(),
             )

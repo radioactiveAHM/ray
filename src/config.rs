@@ -63,7 +63,9 @@ pub enum ResolvingMode {
 #[derive(serde::Deserialize, Clone)]
 pub struct Resolver {
     pub resolver: Option<String>,
-    pub remote: SocketAddr,
+    pub ips: Vec<std::net::IpAddr>,
+    pub port: u16,
+    pub trust_negative_responses: bool,
     pub mode: ResolvingMode,
 }
 

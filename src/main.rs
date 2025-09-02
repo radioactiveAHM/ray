@@ -8,7 +8,6 @@ use tokio_rustls::{
     TlsAcceptor,
     rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
-use utils::unsafe_refmut;
 
 mod auth;
 mod blacklist;
@@ -24,36 +23,13 @@ mod utils;
 mod verror;
 mod vless;
 
-static mut UIT: u64 = 15;
-static mut RESOLVER_MODE: config::ResolvingMode = config::ResolvingMode::IPv4;
-static mut TSO: config::TcpSocketOptions = config::TcpSocketOptions {
-    send_buffer_size: None,
-    recv_buffer_size: None,
-    nodelay: None,
-    keepalive: None,
-};
-
-fn uit() -> u64 {
-    unsafe { UIT }
-}
-
-fn resolver_mode() -> config::ResolvingMode {
-    unsafe { RESOLVER_MODE }
-}
-
-fn tso() -> config::TcpSocketOptions {
-    unsafe { TSO }
-}
+static CONFIG: std::sync::LazyLock<config::Config> = std::sync::LazyLock::new(config::load_config);
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
-
-    // Load config and convert to &'static
-    let c = config::load_config();
-    let config: &'static config::Config = utils::unsafe_staticref(&c);
 
     // Log panic info
     std::panic::set_hook(Box::new(|message| {
@@ -75,19 +51,13 @@ async fn main() {
             }
         }
         // Level order: Error, Warn, Info, Debug, Trace
-        logger.filter_level(config.log.level.convert()).init();
+        logger.filter_level(CONFIG.log.level.convert()).init();
     }
 
-    let resolver = resolver::generate_resolver(&config.resolver);
-    let cresolver = utils::unsafe_staticref(&resolver);
+    let resolver = Arc::new(resolver::generate_resolver(&CONFIG.resolver));
 
-    unsafe {
-        UIT = config.udp_idle_timeout;
-        RESOLVER_MODE = config.resolver.mode;
-        TSO = config.tcp_socket_options
-    }
-
-    for inbound in &config.inbounds {
+    for inbound in &CONFIG.inbounds {
+        let resolver = resolver.clone();
         tokio::spawn(async move {
             let tcp = tokio::net::TcpListener::bind(inbound.listen).await.unwrap();
             if inbound.tls.enable {
@@ -114,11 +84,11 @@ async fn main() {
                 loop {
                     match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
                         Ok(tc) => {
+                            let resolver = resolver.clone();
                             tokio::spawn(async move {
                                 if let Err(e) = tls_handler(
                                     tc,
-                                    config,
-                                    cresolver,
+                                    resolver,
                                     inbound.transporter.clone(),
                                     inbound.sockopt.clone(),
                                 )
@@ -137,13 +107,13 @@ async fn main() {
                 // no tls
                 loop {
                     if let Ok((stream, _)) = tcp.accept().await {
+                        let resolver = resolver.clone();
                         tokio::spawn(async move {
                             if let Ok(peer_addr) = stream.peer_addr()
                                 && let Err(e) = stream_handler(
                                     stream,
-                                    config,
                                     peer_addr,
-                                    cresolver,
+                                    resolver,
                                     inbound.transporter.clone(),
                                     inbound.sockopt.clone(),
                                 )
@@ -164,10 +134,11 @@ async fn main() {
 
 async fn tls_handler(
     tc: tls::Tc,
-    config: &'static config::Config,
-    resolver: &'static hickory_resolver::Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+    resolver: Arc<
+        hickory_resolver::Resolver<
+            hickory_resolver::name_server::GenericConnector<
+                hickory_resolver::proto::runtime::TokioRuntimeProvider,
+            >,
         >,
     >,
     transport: config::Transporter,
@@ -176,16 +147,17 @@ async fn tls_handler(
     let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
     let stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream> = tc.accept().await?;
 
-    stream_handler(stream, config, peer_addr, resolver, transport, sockopt).await
+    stream_handler(stream, peer_addr, resolver, transport, sockopt).await
 }
 
 async fn stream_handler<S>(
     mut stream: S,
-    config: &'static config::Config,
     peer_addr: SocketAddr,
-    resolver: &'static hickory_resolver::Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
+    resolver: Arc<
+        hickory_resolver::Resolver<
+            hickory_resolver::name_server::GenericConnector<
+                hickory_resolver::proto::runtime::TokioRuntimeProvider,
+            >,
         >,
     >,
     transport: config::Transporter,
@@ -246,31 +218,29 @@ where
                         return Err(verror::VError::TransporterError.into());
                     }
                 }
-                return transporters::websocket_transport(ws, config, resolver, peer_addr, sockopt)
-                    .await;
+                return transporters::websocket_transport(ws, resolver, peer_addr, sockopt).await;
             } else {
                 return Err(verror::VError::TransporterError.into());
             }
         }
     }
 
-    let vless = vless::Vless::new(&buff[..size], resolver, &config.blacklist).await?;
-    if auth::authenticate(config, &vless, peer_addr) {
+    let vless = vless::Vless::new(&buff[..size], &resolver).await?;
+    if auth::authenticate(&vless, peer_addr) {
         return Err(verror::VError::AuthenticationFailed.into());
     }
 
     let payload = buff[..size].to_vec();
     drop(buff);
     if let Err(e) = match vless.rt {
-        vless::SocketType::TCP => handle_tcp(vless, payload, stream, config, sockopt).await,
-        vless::SocketType::UDP => handle_udp(vless, payload, stream, config, sockopt).await,
+        vless::SocketType::TCP => handle_tcp(vless, payload, stream, sockopt).await,
+        vless::SocketType::UDP => handle_udp(vless, payload, stream, sockopt).await,
         vless::SocketType::MUX => {
             mux::xudp(
                 stream,
                 payload,
                 resolver,
-                &config.blacklist,
-                config.udp_proxy_buffer_size.unwrap_or(8),
+                CONFIG.udp_proxy_buffer_size.unwrap_or(8),
                 sockopt,
                 peer_addr.ip(),
             )
@@ -285,12 +255,10 @@ where
     Ok(())
 }
 
-#[inline(never)]
 async fn handle_tcp<S>(
     vless: vless::Vless,
     payload: Vec<u8>,
     mut stream: S,
-    config: &'static config::Config,
     sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
 where
@@ -304,20 +272,22 @@ where
     }
     drop(payload);
 
-    let tpbs = config.tcp_proxy_buffer_size.unwrap_or(8);
+    let tpbs = CONFIG.tcp_proxy_buffer_size.unwrap_or(8);
 
     let _ = stream.write(&[0, 0]).await?;
 
+    let (mut client_r, mut client_w) = tokio::io::split(stream);
+    let (mut target_r, mut target_w) = target.split();
     let err: tokio::io::Error;
     loop {
         let operation = tokio::time::timeout(
-            std::time::Duration::from_secs(config.tcp_idle_timeout),
+            std::time::Duration::from_secs(CONFIG.tcp_idle_timeout),
             async {
                 tokio::select! {
-                    piping = pipe::copy(unsafe_refmut(&stream), unsafe_refmut(&target), tpbs) => {
+                    piping = pipe::copy(&mut client_r, &mut target_w, tpbs) => {
                         piping
                     },
-                    piping = pipe::copy(unsafe_refmut(&target), unsafe_refmut(&stream), tpbs) => {
+                    piping = pipe::copy(&mut target_r, &mut client_w, tpbs) => {
                         piping
                     },
                 }
@@ -337,17 +307,15 @@ where
             _ => (),
         }
     }
-    let _ = stream.shutdown().await;
-    let _ = target.shutdown().await;
+    let _ = client_w.shutdown().await;
+    let _ = target_w.shutdown().await;
     Err(err)
 }
 
-#[inline(never)]
 async fn handle_udp<S>(
     vless: vless::Vless,
     payload: Vec<u8>,
-    mut stream: S,
-    config: &'static config::Config,
+    stream: S,
     sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
 where
@@ -366,8 +334,7 @@ where
     {
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
-                if tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err()
-                {
+                if tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() {
                     log::error!("Failed to set bind to device")
                 };
             }
@@ -381,12 +348,17 @@ where
     }
     drop(payload);
 
-    // proxy UDP
+    let (mut client_r, mut client_w) = tokio::io::split(stream);
     if let Err(e) = tokio::try_join!(
-        udputils::copy_t2u(&udp, unsafe_refmut(&stream), config.udp_proxy_buffer_size.unwrap_or(8), config.udp_idle_timeout),
-        udputils::copy_u2t(&udp, unsafe_refmut(&stream))
+        udputils::copy_t2u(
+            &udp,
+            &mut client_r,
+            CONFIG.udp_proxy_buffer_size.unwrap_or(8),
+            CONFIG.udp_idle_timeout
+        ),
+        udputils::copy_u2t(&udp, &mut client_w)
     ) {
-        let _ = stream.shutdown().await;
+        let _ = client_w.shutdown().await;
         return Err(e);
     };
 

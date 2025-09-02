@@ -4,12 +4,12 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
-uuid = "1.18.0"
+uuid = "1.18.1"
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "net", "macros", "io-util", "time", "sync"] }
 tokio-rustls = { version = "0.26.2", default-features = false, features = ["ring", "tls12"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
-hickory-resolver = { version = "0.25.2", features = ["https-ring", "h3-ring", "quic-ring", "tls-ring", "webpki-roots"] }
+hickory-resolver = { version = "0.25.2", default-features = false, features = ["tokio", "https-ring", "h3-ring", "quic-ring", "tls-ring", "webpki-roots"] }
 tokio-websockets = { version = "0.12.1", features = ["server", "sha1_smol"] }
 futures-util = "0.3.31"
 bytes = "1.10.1"

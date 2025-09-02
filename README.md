@@ -1,6 +1,6 @@
 # Ray
 
-Vless server protocol written in rust. High performance, asynchronous, cheap and best for those who are avoiding complexity.
+Asynchronous Vless server protocol written in rust.
 
 ## Transports
 
@@ -16,20 +16,16 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
 
 ## Configuration File `config.json`
 
-**Notes:**
-
-- Increasing the buffer size for `tcp_proxy_buffer_size` and `udp_proxy_buffer_size` enhances throughput and reduces latency and cpu usage. However, be mindful of memory usage and the number of users if the system runs out of memory, the application will crash.
-
 ```json
 {
     "log": {
-        "level": "error",
-        "file": ".log"
+        "level": "error", // off, error, warn, info, debug, trace
+        "file": ".log" // 
     },
-    "tcp_proxy_buffer_size": null, // Defines the internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
-    "udp_proxy_buffer_size": null, // Defines the internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
-    "tcp_idle_timeout": 150, // TCP idle timeout in seconds (connection closes after 300 seconds of inactivity)
-    "udp_idle_timeout": 90, // UDP idle timeout in seconds
+    "tcp_proxy_buffer_size": null, // The internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
+    "udp_proxy_buffer_size": null, // The internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
+    "tcp_idle_timeout": 150, // TCP idle timeout in seconds.
+    "udp_idle_timeout": 90, // UDP idle timeout in seconds.
     "users": [ // User list
         {
             "name": "admin",
@@ -57,8 +53,10 @@ Vless server protocol written in rust. High performance, asynchronous, cheap and
         }
     ],
     "resolver": { // Built-in domain resolver supporting multiple protocols: udp, https, h3, tls, and quic
-        "resolver": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google"
-        "remote": "8.8.8.8:53", // Standard port: UDP (53), HTTPS (443), TLS/QUIC (853)
+        "resolver": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google", "quic://dns.google"
+        "ips": ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
+        "port": 53,
+        "trust_negative_responses": true,
         "mode": "IPv4" // Options: 'IPv4' prioritizes IPv4 over IPv6; 'IPv6' prioritizes IPv6 over IPv4
     },
     "tcp_socket_options": {
@@ -85,7 +83,7 @@ HTTP
     "transporter": {
         "HTTP": {
             "path": "/",
-            "host": "meow.com", // If set null any host will be accepted
+            "host": "example.com", // If set null any host will be accepted
             "method": "GET"
         }
     }
@@ -97,7 +95,7 @@ HttpUpgrade
     "transporter": {
         "HttpUpgrade": {
             "path": "/",
-            "host": "meow.com", // If set null any host will be accepted
+            "host": "example.com", // If set null any host will be accepted
             "method": "GET"
         }
     }
@@ -109,33 +107,9 @@ WS
     "transporter": {
         "WS": {
             "path": "/",
-            "host": "meow.com", // If set null any host will be accepted
+            "host": "example.com", // If set null any host will be accepted
             "threshold": null, // The default is 8 KiB. Unit is Kb. !!! It's better to set the value same as tcp_proxy_buffer_size.
             "frame_size": null // Max Outgoing frame size. The default is 4MiB. Unit is Kb.
-        }
-    }
-```
-
-XHttp
-
-```json
-    "transporter": {
-        "XHttp": {
-            "initial_connection_window_size": null,
-            "initial_window_size": null,
-            "max_concurrent_streams": null,
-            "max_frame_size": null,
-            "max_send_buffer_size": null,
-            "reset_stream_duration": null,
-
-            "recv_data_frame_timeout": 30000,
-            "tcp_buffer_size": 8,
-
-            "wait_for_sec_timeout": 30000,
-            "wait_for_sec_interval": 100,
-
-            "wait_for_init_timeout": 10000,
-            "wait_for_init_interval": 50
         }
     }
 ```

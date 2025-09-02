@@ -34,7 +34,9 @@
 	],
 	"resolver": {
 		"resolver": null,
-		"remote": "1.1.1.1:53",
+		"ips": ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
+		"port": 53,
+		"trust_negative_responses": true,
 		"mode": "IPv4"
 	},
 	"tcp_socket_options": {
