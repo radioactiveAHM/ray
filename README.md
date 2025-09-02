@@ -20,7 +20,7 @@ Asynchronous Vless server protocol written in rust.
 {
     "log": {
         "level": "error", // off, error, warn, info, debug, trace
-        "file": ".log" // 
+        "file": "l.log"
     },
     "tcp_proxy_buffer_size": null, // The internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "udp_proxy_buffer_size": null, // The internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.

@@ -40,7 +40,7 @@ async fn main() {
         let mut logger = env_logger::builder();
         #[cfg(not(debug_assertions))]
         {
-            if let Some(file) = &config.log.file {
+            if let Some(file) = &CONFIG.log.file {
                 logger.target(env_logger::Target::Pipe(Box::new(
                     std::fs::OpenOptions::new()
                         .create(true)
