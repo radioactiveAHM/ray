@@ -1,6 +1,7 @@
 # Ray
 
-Asynchronous Vless server protocol written in rust.
+> **Ray** is an asynchronous VLESS server protocol implemented in Rust.  
+> _Note: This project is intended as a personal portfolio piece and is not actively maintained. Pull requests will not be accepted._
 
 ## Transports
 
