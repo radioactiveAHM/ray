@@ -1,4 +1,4 @@
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 
 use hickory_resolver::{
     Resolver, config::NameServerConfigGroup, name_server::TokioConnectionProvider,
@@ -57,35 +57,18 @@ pub fn generate_resolver(
         NameServerConfigGroup::from_ips_clear(&rc.ips, rc.port, rc.trust_negative_responses)
     };
 
+    let mut options = hickory_resolver::config::ResolverOpts::default();
+    options.cache_size = rc.cache_size;
+    options.ip_strategy = rc.ip_strategy.convert();
+    options.timeout = std::time::Duration::from_secs(rc.timeout);
+    options.num_concurrent_reqs = rc.num_concurrent_reqs;
+
     Resolver::builder_with_config(
         hickory_resolver::config::ResolverConfig::from_parts(None, Vec::new(), protocol),
         TokioConnectionProvider::default(),
     )
+    .with_options(options)
     .build()
-}
-
-pub async fn lookup(
-    r: &Resolver<
-        hickory_resolver::name_server::GenericConnector<
-            hickory_resolver::proto::runtime::TokioRuntimeProvider,
-        >,
-    >,
-    d: &str,
-    v4: bool,
-) -> Option<IpAddr> {
-    if v4 {
-        if let Ok(record) = r.ipv4_lookup(d).await {
-            record.iter().next().map(|a| IpAddr::V4(a.0))
-        } else {
-            log::error!("Failed to resolve {d}");
-            None
-        }
-    } else if let Ok(record) = r.ipv6_lookup(d).await {
-        record.iter().next().map(|aaaa| IpAddr::V6(aaaa.0))
-    } else {
-        log::error!("Failed to resolve {d}");
-        None
-    }
 }
 
 pub async fn resolve(
@@ -97,26 +80,14 @@ pub async fn resolve(
     domain: &str,
     port: u16,
 ) -> Result<SocketAddr, VError> {
-    match crate::CONFIG.resolver.mode {
-        crate::config::ResolvingMode::IPv4 => {
-            if let Some(ip) = lookup(resolver, domain, true).await {
-                Ok(SocketAddr::new(ip, port))
-            } else if let Some(ip) = lookup(resolver, domain, false).await {
+    match resolver.lookup_ip(domain).await {
+        Ok(lookup) => {
+            if let Some(ip) = lookup.iter().next() {
                 Ok(SocketAddr::new(ip, port))
             } else {
-                log::error!("No host for {domain}");
                 Err(VError::NoHost)
             }
         }
-        crate::config::ResolvingMode::IPv6 => {
-            if let Some(ip) = lookup(resolver, domain, false).await {
-                Ok(SocketAddr::new(ip, port))
-            } else if let Some(ip) = lookup(resolver, domain, true).await {
-                Ok(SocketAddr::new(ip, port))
-            } else {
-                log::error!("No host for {domain}");
-                Err(VError::NoHost)
-            }
-        }
+        Err(e) => Err(VError::ResolveDnsFailed(e)),
     }
 }

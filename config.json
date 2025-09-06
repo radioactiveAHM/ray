@@ -37,7 +37,10 @@
 		"ips": ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
 		"port": 53,
 		"trust_negative_responses": true,
-		"mode": "IPv4"
+		"ip_strategy": "Ipv4thenIpv6",
+		"cache_size": 64,
+		"timeout": 5,
+		"num_concurrent_reqs": 12
 	},
 	"tcp_socket_options": {
 		"send_buffer_size": null,

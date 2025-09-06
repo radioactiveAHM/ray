@@ -15,7 +15,7 @@ futures-util = "0.3.31"
 bytes = "1.10.1"
 local-ip-address = "0.6.5"
 libc = "0.2.175"
-log = "0.4.27"
+log = "0.4.28"
 env_logger = "0.11.8"
 
 [profile.release]

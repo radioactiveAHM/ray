@@ -56,8 +56,27 @@ pub struct User {
 
 #[derive(serde::Deserialize, Clone, Copy)]
 pub enum ResolvingMode {
-    IPv4, // Prefer IPv4 over IPv6
-    IPv6, // Prefer IPv6 over IPv4
+    /// Only query for A (Ipv4) records
+    Ipv4Only,
+    /// Only query for AAAA (Ipv6) records
+    Ipv6Only,
+    /// Query for A and AAAA in parallel
+    Ipv4AndIpv6,
+    /// Query for Ipv6 if that fails, query for Ipv4
+    Ipv6thenIpv4,
+    /// Query for Ipv4 if that fails, query for Ipv6 (default)
+    Ipv4thenIpv6,
+}
+impl ResolvingMode {
+    pub fn convert(&self) -> hickory_resolver::config::LookupIpStrategy {
+        match self {
+            Self::Ipv4Only => hickory_resolver::config::LookupIpStrategy::Ipv4Only,
+            Self::Ipv6Only => hickory_resolver::config::LookupIpStrategy::Ipv6Only,
+            Self::Ipv4AndIpv6 => hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6,
+            Self::Ipv6thenIpv4 => hickory_resolver::config::LookupIpStrategy::Ipv6thenIpv4,
+            Self::Ipv4thenIpv6 => hickory_resolver::config::LookupIpStrategy::Ipv4thenIpv6,
+        }
+    }
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -66,7 +85,10 @@ pub struct Resolver {
     pub ips: Vec<std::net::IpAddr>,
     pub port: u16,
     pub trust_negative_responses: bool,
-    pub mode: ResolvingMode,
+    pub ip_strategy: ResolvingMode,
+    pub cache_size: usize,
+    pub timeout: u64,
+    pub num_concurrent_reqs: usize,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

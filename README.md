@@ -58,7 +58,10 @@
         "ips": ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
         "port": 53,
         "trust_negative_responses": true,
-        "mode": "IPv4" // Options: 'IPv4' prioritizes IPv4 over IPv6; 'IPv6' prioritizes IPv6 over IPv4
+        "ip_strategy": "Ipv4thenIpv6", // Options: Ipv4Only, Ipv6Only, Ipv4AndIpv6, Ipv6thenIpv4, Ipv4thenIpv6,
+        "cache_size": 64,
+        "timeout": 5,
+        "num_concurrent_reqs": 2
     },
     "tcp_socket_options": {
         "send_buffer_size": null, // The size of the socket send buffer, if set; null means default system size
