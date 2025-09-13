@@ -10,7 +10,7 @@ pub async fn copy_u2t<W>(
 where
     W: AsyncWrite + Unpin + Send,
 {
-    let mut buff = vec![0; buf_size * 8];
+    let mut buff = vec![0; buf_size * 1024];
 
     {
         // write first packet
