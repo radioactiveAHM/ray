@@ -4,21 +4,13 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use crate::utils::convert_two_u8s_to_u16_be;
 use crate::verror::VError;
 
-// UUID 1-17 | 17 - (22|23) details
-// uuid::uuid!("a18b0775-2669-5cfc-b5e8-99bd5fd70884").as_bytes()
-
-// 17 - 23 details
-// 17 & 18: [0, 1]
-// 19 & 20: port as two u8
-// 21: type of target (1 = ipv4 [22..26]) (2 = domian [23..x] which 22 is len) (3 = ipv6 [22..38])
-
-fn parse_socket(s: u8) -> Result<SocketType, VError> {
+fn parse_socket(s: u8) -> Result<RequestCommand, VError> {
     if s == 1 {
-        Ok(SocketType::TCP)
+        Ok(RequestCommand::TCP)
     } else if s == 2 {
-        Ok(SocketType::UDP)
+        Ok(RequestCommand::UDP)
     } else if s == 3 {
-        Ok(SocketType::MUX)
+        Ok(RequestCommand::MUX)
     } else {
         Err(VError::UnknownSocket)
     }
@@ -77,12 +69,12 @@ async fn parse_target(
 }
 
 #[allow(clippy::upper_case_acronyms)]
-pub enum SocketType {
+pub enum RequestCommand {
     TCP,
     UDP,
     MUX,
 }
-impl Display for SocketType {
+impl Display for RequestCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
             Self::TCP => write!(f, "TCP"),
@@ -94,7 +86,7 @@ impl Display for SocketType {
 
 pub struct Vless {
     pub uuid: [u8; 16],
-    pub rt: SocketType,
+    pub rt: RequestCommand,
     pub target: Option<(SocketAddr, usize)>,
 }
 

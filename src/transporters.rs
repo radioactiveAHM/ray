@@ -185,9 +185,9 @@ where
 
     let wst = Wst { ws, closed: false };
     if let Err(e) = match vless.rt {
-        crate::vless::SocketType::TCP => crate::handle_tcp(vless, payload, wst, sockopt).await,
-        crate::vless::SocketType::UDP => crate::handle_udp(vless, payload, wst, sockopt).await,
-        crate::vless::SocketType::MUX => {
+        crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload, wst, sockopt).await,
+        crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload, wst, sockopt).await,
+        crate::vless::RequestCommand::MUX => {
             crate::mux::xudp(
                 wst,
                 payload,

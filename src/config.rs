@@ -47,11 +47,19 @@ pub enum Transporter {
     WS(Ws),
 }
 
+fn deserialize_uuid<'de, D>(deserializer: D) -> Result<uuid::Uuid, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    uuid::Uuid::try_parse(&<String as serde::Deserialize>::deserialize(deserializer)?)
+        .map_err(serde::de::Error::custom)
+}
+
 #[derive(serde::Deserialize)]
-#[allow(dead_code)]
 pub struct User {
     pub name: String,
-    pub uuid: String,
+    #[serde(deserialize_with = "deserialize_uuid")]
+    pub uuid: uuid::Uuid,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

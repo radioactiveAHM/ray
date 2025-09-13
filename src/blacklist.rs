@@ -7,7 +7,7 @@ pub fn containing(
         if list
             .domains
             .iter()
-            .any(|blackdomain| blackdomain.as_str() == domain)
+            .any(|blackdomain| domain.contains(blackdomain))
         {
             log::info!("Domain {} in {} blacklist blocked", domain, list.name);
             return Err(crate::verror::VError::DomainInBlacklist);

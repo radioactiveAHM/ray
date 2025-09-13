@@ -2,11 +2,15 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::utils::{self, convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
-pub async fn copy_u2t<W>(udp: &tokio::net::UdpSocket, mut w: W) -> tokio::io::Result<()>
+pub async fn copy_u2t<W>(
+    udp: &tokio::net::UdpSocket,
+    mut w: W,
+    buf_size: usize,
+) -> tokio::io::Result<()>
 where
     W: AsyncWrite + Unpin + Send,
 {
-    let mut buff = [0; 1024 * 8];
+    let mut buff = vec![0; buf_size * 8];
 
     {
         // write first packet
@@ -93,18 +97,16 @@ impl AsyncWrite for UdpWriter<'_> {
         std::task::Poll::Ready(Ok(buf.len()))
     }
 
-    #[allow(unused_variables)]
     fn poll_shutdown(
         self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         std::task::Poll::Ready(Ok(()))
     }
 
-    #[allow(unused_variables)]
     fn poll_flush(
         self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         std::task::Poll::Ready(Ok(()))
     }

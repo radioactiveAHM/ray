@@ -1,9 +1,7 @@
 #[inline(always)]
 pub fn authenticate(vconn: &crate::vless::Vless, userip: std::net::SocketAddr) -> bool {
     for user in &crate::CONFIG.users {
-        if let Ok(uuid) = uuid::Uuid::try_parse(&user.uuid)
-            && uuid.as_bytes() == vconn.uuid.as_slice()
-        {
+        if user.uuid.as_bytes() == vconn.uuid.as_slice() {
             if let Some(target) = vconn.target {
                 log::info!(
                     "User {} connected from {} commanding {} to {}",

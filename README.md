@@ -123,16 +123,16 @@ WS
 ```json
     "blacklist": [
         { // Black list object
-            "name": "google", // List name
+            "name": "google",
             "domains": [ // List of domains
-                "google.com",
-                "www.google.com"
+                "google.com", // This will block any domain containing google.com for example mail.google.com.
+                "googleadservices.com"
             ]
         },
         {
-            "name": "facebook",
+            "name": "xyz blacklist",
             "domains": [
-                "facebook.com"
+                ".xyz" // This will block any domain xyz domain.
             ]
         },
     ]

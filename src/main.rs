@@ -233,9 +233,9 @@ where
     let payload = buff[..size].to_vec();
     drop(buff);
     if let Err(e) = match vless.rt {
-        vless::SocketType::TCP => handle_tcp(vless, payload, stream, sockopt).await,
-        vless::SocketType::UDP => handle_udp(vless, payload, stream, sockopt).await,
-        vless::SocketType::MUX => {
+        vless::RequestCommand::TCP => handle_tcp(vless, payload, stream, sockopt).await,
+        vless::RequestCommand::UDP => handle_udp(vless, payload, stream, sockopt).await,
+        vless::RequestCommand::MUX => {
             mux::xudp(
                 stream,
                 payload,
@@ -356,7 +356,11 @@ where
             CONFIG.udp_proxy_buffer_size.unwrap_or(8),
             CONFIG.udp_idle_timeout
         ),
-        udputils::copy_u2t(&udp, &mut client_w)
+        udputils::copy_u2t(
+            &udp,
+            &mut client_w,
+            CONFIG.udp_proxy_buffer_size.unwrap_or(8)
+        )
     ) {
         let _ = client_w.shutdown().await;
         return Err(e);
