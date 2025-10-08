@@ -18,15 +18,15 @@ categories = [
 [dependencies]
 uuid = "1.18.1"
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "net", "macros", "io-util", "time", "sync"] }
-tokio-rustls = { version = "0.26.3", default-features = false, features = ["ring", "tls12"] }
-serde = { version = "1.0.225", features = ["derive"] }
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 hickory-resolver = { version = "0.25.2", default-features = false, features = ["tokio", "https-ring", "h3-ring", "quic-ring", "tls-ring", "webpki-roots"] }
-tokio-websockets = { version = "0.12.1", features = ["server", "sha1_smol"] }
+tokio-websockets = { version = "0.13.0", features = ["server", "sha1_smol"] }
 futures-util = "0.3.31"
 bytes = "1.10.1"
 local-ip-address = "0.6.5"
-libc = "0.2.175"
+libc = "0.2.176"
 log = "0.4.28"
 env_logger = "0.11.8"
 

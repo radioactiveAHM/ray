@@ -99,12 +99,6 @@ pub struct Resolver {
     pub num_concurrent_reqs: usize,
 }
 
-#[derive(serde::Deserialize, Clone, Copy)]
-pub enum TcpProxyMod {
-    Buffer,
-    Stack,
-}
-
 #[derive(serde::Deserialize, Clone)]
 #[allow(dead_code)]
 pub struct SockOpt {
