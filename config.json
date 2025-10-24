@@ -1,4 +1,9 @@
 {
+	"runtime": {
+		"runtime_mode": "Multi",
+		"worker_threads": null,
+		"thread_stack_size": null
+	},
 	"log": {
 		"level": "error",
 		"file": "l.log"

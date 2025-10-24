@@ -19,6 +19,11 @@
 
 ```json
 {
+    "runtime": {
+        "runtime_mode": "Multi", // Multi, Single.
+        "worker_threads": null, // null for default. only for Multi mode
+        "thread_stack_size": null // null for default
+    },
     "log": {
         "level": "error", // off, error, warn, info, debug, trace
         "file": "l.log"

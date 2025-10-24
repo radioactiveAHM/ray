@@ -148,7 +148,21 @@ pub struct Log {
 }
 
 #[derive(serde::Deserialize)]
+pub enum RuntimeMode {
+    Single,
+    Multi
+}
+
+#[derive(serde::Deserialize)]
+pub struct Runtime {
+    pub runtime_mode: RuntimeMode,
+    pub worker_threads: Option<usize>,
+    pub thread_stack_size: Option<usize>
+}
+
+#[derive(serde::Deserialize)]
 pub struct Config {
+    pub runtime: Runtime,
     pub log: Log,
     pub tcp_proxy_buffer_size: Option<usize>,
     pub udp_proxy_buffer_size: Option<usize>,

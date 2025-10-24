@@ -25,8 +25,25 @@ mod vless;
 
 static CONFIG: std::sync::LazyLock<config::Config> = std::sync::LazyLock::new(config::load_config);
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() {
+fn main() {
+    let tokio_runtime = match CONFIG.runtime.runtime_mode {
+        config::RuntimeMode::Multi => {
+            let mut r = tokio::runtime::Builder::new_multi_thread();
+            CONFIG.runtime.worker_threads.map(|worker_threads| r.worker_threads(worker_threads));
+            CONFIG.runtime.thread_stack_size.map(|thread_stack_size| r.thread_stack_size(thread_stack_size));
+            r
+        }
+        config::RuntimeMode::Single => {
+            let mut r = tokio::runtime::Builder::new_current_thread();
+            CONFIG.runtime.thread_stack_size.map(|thread_stack_size| r.thread_stack_size(thread_stack_size));
+            r
+        }
+    }.enable_all().build().unwrap();
+
+    tokio_runtime.block_on(app());
+}
+
+async fn app() {
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
