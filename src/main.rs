@@ -26,21 +26,54 @@ mod vless;
 static CONFIG: std::sync::LazyLock<config::Config> = std::sync::LazyLock::new(config::load_config);
 
 fn main() {
-    let tokio_runtime = match CONFIG.runtime.runtime_mode {
+    match CONFIG.runtime.runtime_mode {
         config::RuntimeMode::Multi => {
             let mut r = tokio::runtime::Builder::new_multi_thread();
-            CONFIG.runtime.worker_threads.map(|worker_threads| r.worker_threads(worker_threads));
-            CONFIG.runtime.thread_stack_size.map(|thread_stack_size| r.thread_stack_size(thread_stack_size));
+
+            if let Some(worker_threads) = CONFIG.runtime.worker_threads {
+                r.worker_threads(worker_threads);
+            }
+            if let Some(thread_stack_size) = CONFIG.runtime.thread_stack_size {
+                r.thread_stack_size(thread_stack_size);
+            }
+            if let Some(event_interval) = CONFIG.runtime.event_interval {
+                r.event_interval(event_interval);
+            }
+            if let Some(global_queue_interval) = CONFIG.runtime.global_queue_interval {
+                r.global_queue_interval(global_queue_interval);
+            }
+            if let Some(thread_keep_alive) = CONFIG.runtime.thread_keep_alive {
+                r.thread_keep_alive(std::time::Duration::from_secs(thread_keep_alive));
+            }
+
             r
         }
         config::RuntimeMode::Single => {
             let mut r = tokio::runtime::Builder::new_current_thread();
-            CONFIG.runtime.thread_stack_size.map(|thread_stack_size| r.thread_stack_size(thread_stack_size));
+
+            if let Some(thread_stack_size) = CONFIG.runtime.thread_stack_size {
+                r.thread_stack_size(thread_stack_size);
+            }
+            if let Some(event_interval) = CONFIG.runtime.event_interval {
+                r.event_interval(event_interval);
+            }
+            if let Some(global_queue_interval) = CONFIG.runtime.global_queue_interval {
+                r.global_queue_interval(global_queue_interval);
+            }
+            if let Some(thread_keep_alive) = CONFIG.runtime.thread_keep_alive {
+                r.thread_keep_alive(std::time::Duration::from_secs(thread_keep_alive));
+            }
+            if let Some(max_io_events_per_tick) = CONFIG.runtime.max_io_events_per_tick {
+                r.max_io_events_per_tick(max_io_events_per_tick);
+            }
+
             r
         }
-    }.enable_all().build().unwrap();
-
-    tokio_runtime.block_on(app());
+    }
+    .enable_all()
+    .build()
+    .unwrap()
+    .block_on(app());
 }
 
 async fn app() {
