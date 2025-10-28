@@ -84,7 +84,7 @@ pub async fn xudp<S>(
     peer_ip: IpAddr,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     // remove vless head
     buffer.drain(..19);
@@ -135,7 +135,7 @@ pub async fn copy_u2t<W>(
     domain_map: RefCell<HashMap<IpAddr, String>>,
 ) -> tokio::io::Result<()>
 where
-    W: AsyncWrite + Unpin + Send,
+    W: AsyncWrite + Unpin,
 {
     let _ = w.write([0, 0].as_slice()).await?;
     // K: Keep Sub Connections (Keep)
@@ -201,7 +201,7 @@ pub async fn copy_t2u<R>(
     >,
 ) -> tokio::io::Result<()>
 where
-    R: AsyncRead + Unpin + Send,
+    R: AsyncRead + Unpin,
 {
     let mut b = Vec::with_capacity(buf_size * 1024);
     b.extend_from_slice(&b0);
@@ -224,7 +224,7 @@ async fn handle_xudp_packets<R>(
     >,
 ) -> tokio::io::Result<()>
 where
-    R: AsyncRead + Unpin + Send,
+    R: AsyncRead + Unpin,
 {
     // --> handle first packet if avaliable
     if internal_buf.len() > 2 {

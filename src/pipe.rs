@@ -16,7 +16,7 @@ where
         tokio::task::yield_now().await;
         read(&mut pinned, &mut wrapper).await?;
         let _ = w.write(wrapper.filled()).await?;
-        let _ = w.flush().await;
+        w.flush().await?;
         wrapper.clear();
     }
 }
@@ -61,7 +61,7 @@ where
         tokio::task::yield_now().await;
         read_timeout(&mut pinned, &mut wrapper, timeout_dur).await?;
         let _ = w.write(wrapper.filled()).await?;
-        let _ = w.flush().await;
+        w.flush().await?;
         wrapper.clear();
     }
 }

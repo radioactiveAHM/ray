@@ -26,7 +26,7 @@
         "event_interval": null, // null for default.
         "global_queue_interval": null, // null for default.
         "max_io_events_per_tick": null, // null for default. only for Single mode.
-        "thread_keep_alive": null // null for default.
+        "thread_keep_alive": null // null for default. In seconds.
     },
     "log": {
         "level": "error", // off, error, warn, info, debug, trace
@@ -121,7 +121,7 @@ WS
         "WS": {
             "path": "/",
             "host": "example.com", // If set null any host will be accepted
-            "threshold": null, // The default is 8 KiB. Unit is Kb. !!! It's better to set the value same as tcp_proxy_buffer_size.
+            "threshold": null, // The default is 8 KiB.
             "frame_size": null // Max Outgoing frame size. The default is 4MiB. Unit is Kb.
         }
     }

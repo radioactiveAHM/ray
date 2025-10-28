@@ -8,7 +8,7 @@ pub async fn copy_u2t<W>(
     buf_size: usize,
 ) -> tokio::io::Result<()>
 where
-    W: AsyncWrite + Unpin + Send,
+    W: AsyncWrite + Unpin,
 {
     let mut buff = vec![0; buf_size * 1024];
 
@@ -18,7 +18,6 @@ where
         let octat = convert_u16_to_two_u8s_be(size as u16);
         buff[2..4].copy_from_slice(&octat);
         let _ = w.write(&buff[..size + 4]).await?;
-        w.flush().await?;
     }
 
     loop {
@@ -26,7 +25,6 @@ where
         let octat = convert_u16_to_two_u8s_be(size as u16);
         buff[0..2].copy_from_slice(&octat);
         let _ = w.write(&buff[..size + 2]).await?;
-        w.flush().await?;
     }
 }
 
@@ -119,7 +117,7 @@ pub async fn copy_t2u<R>(
     timeout_dur: u64,
 ) -> tokio::io::Result<()>
 where
-    R: AsyncRead + Unpin + Send,
+    R: AsyncRead + Unpin,
 {
     let mut uw = UdpWriter {
         udp,

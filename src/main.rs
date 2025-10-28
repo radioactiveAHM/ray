@@ -77,10 +77,6 @@ fn main() {
 }
 
 async fn app() {
-    tokio_rustls::rustls::crypto::ring::default_provider()
-        .install_default()
-        .unwrap();
-
     // Log panic info
     std::panic::set_hook(Box::new(|message| {
         log::error!("{message}");
@@ -214,7 +210,7 @@ async fn stream_handler<S>(
     sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     let mut buff: Vec<u8> = vec![0; 1024 * 8];
     let mut size;
@@ -312,7 +308,7 @@ async fn handle_tcp<S>(
     sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     let (target_addr, body) = vless.target.as_ref().unwrap();
     let mut target = tcp::stream(*target_addr, &sockopt).await?;
@@ -369,7 +365,7 @@ async fn handle_udp<S>(
     sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     let (target, body) = vless.target.as_ref().unwrap();
     let ip = if let Some(interface) = &sockopt.interface {
