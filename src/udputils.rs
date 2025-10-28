@@ -1,38 +1,24 @@
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::utils::{self, convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
-pub async fn copy_u2t<W>(
-    udp: &tokio::net::UdpSocket,
-    mut w: W,
-    buf_size: usize,
-) -> tokio::io::Result<()>
-where
-    W: AsyncWrite + Unpin,
-{
-    let mut buff = vec![0; buf_size * 1024];
+pub struct UdpReader<'a> {
+    pub udp: &'a tokio::net::UdpSocket,
+    pub buf: Vec<u8>,
+}
 
-    {
-        // write first packet
-        let size = udp.recv(&mut buff[4..]).await?;
-        let octat = convert_u16_to_two_u8s_be(size as u16);
-        buff[2..4].copy_from_slice(&octat);
-        let _ = w.write(&buff[..size + 4]).await?;
-    }
-
-    loop {
-        let size = udp.recv(&mut buff[2..]).await?;
-        let octat = convert_u16_to_two_u8s_be(size as u16);
-        buff[0..2].copy_from_slice(&octat);
-        let _ = w.write(&buff[..size + 2]).await?;
+impl UdpReader<'_> {
+    pub async fn copy<W: AsyncWrite + Unpin>(&mut self, w: &mut W) -> tokio::io::Result<()> {
+        let size = self.udp.recv(&mut self.buf[2..]).await?;
+        self.buf[0..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
+        let _ = w.write(&self.buf[..size + 2]).await?;
+        Ok(())
     }
 }
 
-// _________________________________________________________________________________________________________ I hate this~
-
-struct UdpWriter<'a> {
-    udp: &'a tokio::net::UdpSocket,
-    b: utils::DeqBuffer,
+pub struct UdpWriter<'a> {
+    pub udp: &'a tokio::net::UdpSocket,
+    pub b: utils::DeqBuffer,
 }
 impl AsyncWrite for UdpWriter<'_> {
     fn poll_write(
@@ -108,21 +94,4 @@ impl AsyncWrite for UdpWriter<'_> {
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         std::task::Poll::Ready(Ok(()))
     }
-}
-
-pub async fn copy_t2u<R>(
-    udp: &tokio::net::UdpSocket,
-    r: R,
-    buf_size: usize,
-    timeout_dur: u64,
-) -> tokio::io::Result<()>
-where
-    R: AsyncRead + Unpin,
-{
-    let mut uw = UdpWriter {
-        udp,
-        b: utils::DeqBuffer::new(buf_size * 1024), // buf_size unit is kb
-    };
-
-    crate::pipe::copy_timeout(r, &mut uw, buf_size, timeout_dur).await
 }

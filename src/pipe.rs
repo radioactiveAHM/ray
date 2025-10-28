@@ -4,35 +4,31 @@ use tokio::{
 };
 
 #[inline(always)]
-pub async fn copy<R, W>(mut r: R, w: &mut W, buff_size: usize) -> tokio::io::Result<()>
+pub async fn copy<R, W>(mut r: R, w: &mut W, buf: &mut ReadBuf<'_>) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    let mut buf = vec![0; 1024 * buff_size];
-    let mut pinned: std::pin::Pin<&mut R> = std::pin::Pin::new(&mut r);
-    let mut wrapper: ReadBuf<'_> = ReadBuf::new(&mut buf);
-    loop {
-        tokio::task::yield_now().await;
-        read(&mut pinned, &mut wrapper).await?;
-        let _ = w.write(wrapper.filled()).await?;
-        w.flush().await?;
-        wrapper.clear();
-    }
+    let mut pinned = std::pin::Pin::new(&mut r);
+    read(&mut pinned, buf).await?;
+    let _ = w.write(buf.filled()).await?;
+    w.flush().await?;
+    buf.clear();
+    Ok(())
 }
 
 #[inline(always)]
 pub async fn read<R>(
     pinned: &mut std::pin::Pin<&mut R>,
-    wrapper: &mut ReadBuf<'_>,
+    buf: &mut ReadBuf<'_>,
 ) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin,
 {
-    std::future::poll_fn(|cx| match pinned.as_mut().poll_read(cx, wrapper) {
+    std::future::poll_fn(|cx| match pinned.as_mut().poll_read(cx, buf) {
         std::task::Poll::Pending => std::task::Poll::Pending,
         std::task::Poll::Ready(Ok(_)) => {
-            if wrapper.filled().is_empty() {
+            if buf.filled().is_empty() {
                 std::task::Poll::Ready(Err(tokio::io::Error::other("Pipe read EOF")))
             } else {
                 std::task::Poll::Ready(Ok(()))
@@ -41,29 +37,6 @@ where
         std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
     })
     .await
-}
-
-#[inline(always)]
-pub async fn copy_timeout<R, W>(
-    mut r: R,
-    w: &mut W,
-    buff_size: usize,
-    timeout_dur: u64,
-) -> tokio::io::Result<()>
-where
-    R: AsyncRead + Unpin,
-    W: AsyncWriteExt + Unpin,
-{
-    let mut buf = vec![0; 1024 * buff_size];
-    let mut pinned: std::pin::Pin<&mut R> = std::pin::Pin::new(&mut r);
-    let mut wrapper: ReadBuf<'_> = ReadBuf::new(&mut buf);
-    loop {
-        tokio::task::yield_now().await;
-        read_timeout(&mut pinned, &mut wrapper, timeout_dur).await?;
-        let _ = w.write(wrapper.filled()).await?;
-        w.flush().await?;
-        wrapper.clear();
-    }
 }
 
 #[inline(always)]

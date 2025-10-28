@@ -322,6 +322,11 @@ where
 
     let _ = stream.write(&[0, 0]).await?;
 
+    let mut client_buf = vec![0; 1024 * tpbs];
+    let mut client_buf_rb = tokio::io::ReadBuf::new(&mut client_buf);
+    let mut target_buf = vec![0; 1024 * tpbs];
+    let mut target_buf_rb = tokio::io::ReadBuf::new(&mut target_buf);
+
     let (mut client_r, mut client_w) = tokio::io::split(stream);
     let (mut target_r, mut target_w) = target.split();
     let err: tokio::io::Error;
@@ -330,10 +335,10 @@ where
             std::time::Duration::from_secs(CONFIG.tcp_idle_timeout),
             async {
                 tokio::select! {
-                    piping = pipe::copy(&mut client_r, &mut target_w, tpbs) => {
+                    piping = pipe::copy(&mut client_r, &mut target_w, &mut client_buf_rb) => {
                         piping
                     },
-                    piping = pipe::copy(&mut target_r, &mut client_w, tpbs) => {
+                    piping = pipe::copy(&mut target_r, &mut client_w, &mut target_buf_rb) => {
                         piping
                     },
                 }
@@ -394,23 +399,51 @@ where
     }
     drop(payload);
 
+    let mut client_buf = vec![0; 1024 * CONFIG.udp_proxy_buffer_size.unwrap_or(8)];
+    let mut client_buf_rb = tokio::io::ReadBuf::new(&mut client_buf);
+
     let (mut client_r, mut client_w) = tokio::io::split(stream);
-    if let Err(e) = tokio::try_join!(
-        udputils::copy_t2u(
-            &udp,
-            &mut client_r,
-            CONFIG.udp_proxy_buffer_size.unwrap_or(8),
-            CONFIG.udp_idle_timeout
-        ),
-        udputils::copy_u2t(
-            &udp,
-            &mut client_w,
-            CONFIG.udp_proxy_buffer_size.unwrap_or(8)
-        )
-    ) {
-        let _ = client_w.shutdown().await;
-        return Err(e);
+
+    let mut uw = udputils::UdpWriter {
+        udp: &udp,
+        b: utils::DeqBuffer::new(CONFIG.udp_proxy_buffer_size.unwrap_or(8) * 1024), // buf_size unit is kb
+    };
+    let mut ur = udputils::UdpReader {
+        udp: &udp,
+        buf: vec![0; CONFIG.udp_proxy_buffer_size.unwrap_or(8) * 1024],
     };
 
-    Ok(())
+    let _ = client_w.write(&[0, 0]).await?;
+
+    let err: tokio::io::Error;
+    loop {
+        let operation = tokio::time::timeout(
+            std::time::Duration::from_secs(CONFIG.udp_idle_timeout),
+            async {
+                tokio::select! {
+                    piping = pipe::copy(&mut client_r, &mut uw, &mut client_buf_rb) => {
+                        piping
+                    },
+                    piping = ur.copy(&mut client_w) => {
+                        piping
+                    },
+                }
+            },
+        )
+        .await;
+
+        match operation {
+            Err(_) => {
+                err = tokio::io::Error::other("Timeout");
+                break;
+            }
+            Ok(Err(e)) => {
+                err = e;
+                break;
+            }
+            _ => (),
+        }
+    }
+    let _ = client_w.shutdown().await;
+    Err(err)
 }

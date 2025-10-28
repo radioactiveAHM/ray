@@ -18,10 +18,10 @@ categories = [
 [dependencies]
 uuid = "1.18.1"
 tokio = { version = "1.48.0", features = ["rt-multi-thread", "rt", "net", "io-util", "time", "sync"] }
-tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["aws-lc-rs", "tls12"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-hickory-resolver = { version = "0.25.2", default-features = false, features = ["tokio", "https-ring", "h3-ring", "quic-ring", "tls-ring", "webpki-roots"] }
+hickory-resolver = { version = "0.25.2", default-features = false, features = ["tokio", "https-aws-lc-rs", "h3-aws-lc-rs", "quic-aws-lc-rs", "tls-aws-lc-rs", "webpki-roots"] }
 tokio-websockets = { version = "0.13.0", features = ["server", "sha1_smol"] }
 futures-util = "0.3.31"
 bytes = "1.10.1"
