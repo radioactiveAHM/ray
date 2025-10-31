@@ -1,4 +1,4 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::io::AsyncWrite;
 
 use crate::utils::{self, convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
@@ -8,10 +8,15 @@ pub struct UdpReader<'a> {
 }
 
 impl UdpReader<'_> {
-    pub async fn copy<W: AsyncWrite + Unpin>(&mut self, w: &mut W) -> tokio::io::Result<()> {
+    #[inline(always)]
+    pub async fn copy<W: AsyncWrite + Unpin>(
+        &mut self,
+        w: &mut std::pin::Pin<&mut W>,
+    ) -> tokio::io::Result<()> {
         let size = self.udp.recv(&mut self.buf[2..]).await?;
         self.buf[0..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
-        let _ = w.write(&self.buf[..size + 2]).await?;
+        let _ = crate::pipe::Write(w, &self.buf[..size + 2]).await?;
+        crate::pipe::Flush(w).await?;
         Ok(())
     }
 }
@@ -21,6 +26,7 @@ pub struct UdpWriter<'a> {
     pub b: utils::DeqBuffer,
 }
 impl AsyncWrite for UdpWriter<'_> {
+    #[inline(always)]
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -81,6 +87,7 @@ impl AsyncWrite for UdpWriter<'_> {
         std::task::Poll::Ready(Ok(buf.len()))
     }
 
+    #[inline(always)]
     fn poll_shutdown(
         self: std::pin::Pin<&mut Self>,
         _cx: &mut std::task::Context<'_>,
@@ -88,6 +95,7 @@ impl AsyncWrite for UdpWriter<'_> {
         std::task::Poll::Ready(Ok(()))
     }
 
+    #[inline(always)]
     fn poll_flush(
         self: std::pin::Pin<&mut Self>,
         _cx: &mut std::task::Context<'_>,

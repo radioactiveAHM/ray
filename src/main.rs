@@ -329,16 +329,21 @@ where
 
     let (mut client_r, mut client_w) = tokio::io::split(stream);
     let (mut target_r, mut target_w) = target.split();
+    let mut client_r_pin = std::pin::Pin::new(&mut client_r);
+    let mut client_w_pin = std::pin::Pin::new(&mut client_w);
+    let mut target_r_pin = std::pin::Pin::new(&mut target_r);
+    let mut target_w_pin = std::pin::Pin::new(&mut target_w);
+
     let err: tokio::io::Error;
     loop {
         let operation = tokio::time::timeout(
             std::time::Duration::from_secs(CONFIG.tcp_idle_timeout),
             async {
                 tokio::select! {
-                    piping = pipe::copy(&mut client_r, &mut target_w, &mut client_buf_rb) => {
+                    piping = pipe::copy(&mut client_r_pin, &mut target_w_pin, &mut client_buf_rb) => {
                         piping
                     },
-                    piping = pipe::copy(&mut target_r, &mut client_w, &mut target_buf_rb) => {
+                    piping = pipe::copy(&mut target_r_pin, &mut client_w_pin, &mut target_buf_rb) => {
                         piping
                     },
                 }
@@ -403,17 +408,21 @@ where
     let mut client_buf_rb = tokio::io::ReadBuf::new(&mut client_buf);
 
     let (mut client_r, mut client_w) = tokio::io::split(stream);
+    let mut client_r_pin = std::pin::Pin::new(&mut client_r);
+    let mut client_w_pin = std::pin::Pin::new(&mut client_w);
 
     let mut uw = udputils::UdpWriter {
         udp: &udp,
         b: utils::DeqBuffer::new(CONFIG.udp_proxy_buffer_size.unwrap_or(8) * 1024), // buf_size unit is kb
     };
+    let mut uw_pin = std::pin::Pin::new(&mut uw);
+
     let mut ur = udputils::UdpReader {
         udp: &udp,
         buf: vec![0; CONFIG.udp_proxy_buffer_size.unwrap_or(8) * 1024],
     };
 
-    let _ = client_w.write(&[0, 0]).await?;
+    let _ = client_w_pin.write(&[0, 0]).await?;
 
     let err: tokio::io::Error;
     loop {
@@ -421,10 +430,10 @@ where
             std::time::Duration::from_secs(CONFIG.udp_idle_timeout),
             async {
                 tokio::select! {
-                    piping = pipe::copy(&mut client_r, &mut uw, &mut client_buf_rb) => {
+                    piping = pipe::copy(&mut client_r_pin, &mut uw_pin, &mut client_buf_rb) => {
                         piping
                     },
-                    piping = ur.copy(&mut client_w) => {
+                    piping = ur.copy(&mut client_w_pin) => {
                         piping
                     },
                 }

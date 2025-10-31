@@ -4,28 +4,28 @@ use tokio::{
 };
 
 #[inline(always)]
-pub async fn copy<R, W>(mut r: R, w: &mut W, buf: &mut ReadBuf<'_>) -> tokio::io::Result<()>
+pub async fn copy<R, W>(
+    r: &mut std::pin::Pin<&mut R>,
+    w: &mut std::pin::Pin<&mut W>,
+    buf: &mut ReadBuf<'_>,
+) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    let mut pinned = std::pin::Pin::new(&mut r);
-    read(&mut pinned, buf).await?;
-    let _ = w.write(buf.filled()).await?;
-    w.flush().await?;
+    read(r, buf).await?;
+    let _ = Write(w, buf.filled()).await;
+    Flush(w).await?;
     buf.clear();
     Ok(())
 }
 
 #[inline(always)]
-pub async fn read<R>(
-    pinned: &mut std::pin::Pin<&mut R>,
-    buf: &mut ReadBuf<'_>,
-) -> tokio::io::Result<()>
+pub async fn read<R>(r: &mut std::pin::Pin<&mut R>, buf: &mut ReadBuf<'_>) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin,
 {
-    std::future::poll_fn(|cx| match pinned.as_mut().poll_read(cx, buf) {
+    std::future::poll_fn(|cx| match r.as_mut().poll_read(cx, buf) {
         std::task::Poll::Pending => std::task::Poll::Pending,
         std::task::Poll::Ready(Ok(_)) => {
             if buf.filled().is_empty() {
@@ -37,6 +37,37 @@ where
         std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
     })
     .await
+}
+
+pub struct Write<'a, 'b, W>(pub &'a mut std::pin::Pin<&'b mut W>, pub &'a [u8]);
+impl<'a, 'b, W> Future for Write<'a, 'b, W>
+where
+    W: AsyncWriteExt + Unpin,
+{
+    type Output = tokio::io::Result<usize>;
+    #[inline(always)]
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
+        this.0.as_mut().poll_write(cx, this.1)
+    }
+}
+
+pub struct Flush<'a, 'b, W>(pub &'a mut std::pin::Pin<&'b mut W>);
+impl<'a, 'b, W> Future for Flush<'a, 'b, W>
+where
+    W: AsyncWriteExt + Unpin,
+{
+    type Output = tokio::io::Result<()>;
+    #[inline(always)]
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        self.0.as_mut().poll_flush(cx)
+    }
 }
 
 #[inline(always)]
