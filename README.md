@@ -32,6 +32,7 @@
         "level": "error", // off, error, warn, info, debug, trace
         "file": "l.log"
     },
+    "tcp_fill_buffer": false, // Enable multiple read attempts to fill the buffer.
     "tcp_proxy_buffer_size": null, // The internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "udp_proxy_buffer_size": null, // The internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds.

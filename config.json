@@ -12,6 +12,7 @@
 		"level": "error",
 		"file": "l.log"
 	},
+	"tcp_fill_buffer": false,
 	"tcp_proxy_buffer_size": null,
 	"udp_proxy_buffer_size": null,
 	"tcp_idle_timeout": 150,

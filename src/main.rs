@@ -340,10 +340,10 @@ where
             std::time::Duration::from_secs(CONFIG.tcp_idle_timeout),
             async {
                 tokio::select! {
-                    piping = pipe::copy(&mut client_r_pin, &mut target_w_pin, &mut client_buf_rb) => {
+                    piping = pipe::copy(&mut client_r_pin, &mut target_w_pin, &mut client_buf_rb, CONFIG.tcp_fill_buffer) => {
                         piping
                     },
-                    piping = pipe::copy(&mut target_r_pin, &mut client_w_pin, &mut target_buf_rb) => {
+                    piping = pipe::copy(&mut target_r_pin, &mut client_w_pin, &mut target_buf_rb, CONFIG.tcp_fill_buffer) => {
                         piping
                     },
                 }
@@ -430,7 +430,7 @@ where
             std::time::Duration::from_secs(CONFIG.udp_idle_timeout),
             async {
                 tokio::select! {
-                    piping = pipe::copy(&mut client_r_pin, &mut uw_pin, &mut client_buf_rb) => {
+                    piping = pipe::copy(&mut client_r_pin, &mut uw_pin, &mut client_buf_rb, CONFIG.tcp_fill_buffer) => {
                         piping
                     },
                     piping = ur.copy(&mut client_w_pin) => {

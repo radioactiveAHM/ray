@@ -168,6 +168,7 @@ pub struct Runtime {
 pub struct Config {
     pub runtime: Runtime,
     pub log: Log,
+    pub tcp_fill_buffer: bool,
     pub tcp_proxy_buffer_size: Option<usize>,
     pub udp_proxy_buffer_size: Option<usize>,
     pub tcp_idle_timeout: u64,

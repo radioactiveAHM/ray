@@ -8,12 +8,17 @@ pub async fn copy<R, W>(
     r: &mut std::pin::Pin<&mut R>,
     w: &mut std::pin::Pin<&mut W>,
     buf: &mut ReadBuf<'_>,
+    fill_buf: bool
 ) -> tokio::io::Result<()>
 where
     R: AsyncRead + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    read(r, buf).await?;
+    if fill_buf {
+        fill(r, buf).await?;
+    } else {
+        read(r, buf).await?;
+    }
     let _ = Write(w, buf.filled()).await;
     Flush(w).await?;
     buf.clear();
@@ -38,6 +43,43 @@ where
     })
     .await
 }
+
+#[inline(always)]
+pub async fn fill<R>(r: &mut std::pin::Pin<&mut R>, buf: &mut ReadBuf<'_>) -> tokio::io::Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    loop {
+        if std::future::poll_fn(|cx| match r.as_mut().poll_read(cx, buf) {
+            std::task::Poll::Pending => {
+                if buf.filled().is_empty() {
+                    std::task::Poll::Pending
+                } else {
+                    // nothing to read anymore
+                    std::task::Poll::Ready(Ok(true))
+                }
+            }
+            std::task::Poll::Ready(Ok(_)) => {
+                if buf.filled().is_empty() {
+                    std::task::Poll::Ready(Err(tokio::io::Error::other("EOF")))
+                } else if buf.remaining() == 0 {
+                    // buf full
+                    std::task::Poll::Ready(Ok(true))
+                } else {
+                    // continue reading
+                    std::task::Poll::Ready(Ok(false))
+                }
+            }
+            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
+        })
+        .await?
+        {
+            break;
+        }
+    }
+    Ok(())
+}
+
 
 pub struct Write<'a, 'b, W>(pub &'a mut std::pin::Pin<&'b mut W>, pub &'a [u8]);
 impl<'a, 'b, W> Future for Write<'a, 'b, W>
