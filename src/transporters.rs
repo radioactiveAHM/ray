@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 pub async fn httpupgrade_transporter<S>(
@@ -88,7 +88,6 @@ where
         }
         match self.ws.poll_next_unpin(cx) {
             std::task::Poll::Pending => std::task::Poll::Pending,
-            // std::task::Poll::Ready(None) => std::task::Poll::Pending,
             std::task::Poll::Ready(None) => {
                 std::task::Poll::Ready(Err(crate::verror::VError::WsClosed.into()))
             }
@@ -139,13 +138,18 @@ where
     }
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
+        cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        match self.ws.start_send_unpin(tokio_websockets::Message::binary(
-            bytes::Bytes::copy_from_slice(buf),
-        )) {
-            Ok(_) => std::task::Poll::Ready(Ok(buf.len())),
+        let mut ws_pin = std::pin::Pin::new(&mut self.ws);
+        match ws_pin
+            .as_mut()
+            .start_send(tokio_websockets::Message::binary(buf.to_vec()))
+        {
+            Ok(_) => {
+                std::task::ready!(ws_pin.poll_flush(cx)).map_err(tokio::io::Error::other)?;
+                std::task::Poll::Ready(Ok(buf.len()))
+            }
             Err(e) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
         }
     }
@@ -178,13 +182,18 @@ where
         return Err(crate::verror::VError::TransporterError.into());
     };
 
-    let wst = Wst { ws, closed: false };
+    let mut wst = Wst { ws, closed: false };
     if let Err(e) = match vless.rt {
-        crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload, wst, sockopt).await,
-        crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload, wst, sockopt).await,
+        crate::vless::RequestCommand::TCP => {
+            // not supported by WS -----------------------------------------------------|     |
+            crate::handle_tcp(vless, payload, &mut wst, sockopt, false).await
+        }
+        crate::vless::RequestCommand::UDP => {
+            crate::handle_udp(vless, payload, &mut wst, sockopt, false).await
+        }
         crate::vless::RequestCommand::MUX => {
             crate::mux::xudp(
-                wst,
+                &mut wst,
                 payload,
                 resolver,
                 crate::CONFIG.udp_proxy_buffer_size.unwrap_or(8),
@@ -194,10 +203,11 @@ where
             .await
         }
     } {
-        log::error!("{peer_addr}: {e}");
+        log::warn!("{peer_addr}: {e}");
     } else {
-        log::error!("{peer_addr}: closed connection");
+        log::warn!("{peer_addr}: closed connection");
     }
 
+    let _ = wst.shutdown().await;
     Ok(())
 }

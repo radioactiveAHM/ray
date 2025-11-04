@@ -18,13 +18,11 @@ where
         let res = Fill(r, buf).await;
         if !buf.filled().is_empty() {
             let _ = Write(w, buf.filled()).await;
-            Flush(w).await?;
         }
         res?;
     } else {
         Read(r, buf).await?;
         let _ = Write(w, buf.filled()).await;
-        Flush(w).await?;
     }
     buf.clear();
     Ok(())

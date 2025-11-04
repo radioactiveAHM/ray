@@ -18,18 +18,18 @@ pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::
     {
         if let Some(mss) = sockopt.mss {
             if tcp_options::set_tcp_mss(&socket, mss).is_err() {
-                log::error!("Failed to set tcp mss");
+                log::warn!("Failed to set tcp mss");
             };
         }
         if let Some(congestion) = &sockopt.congestion {
             if tcp_options::set_tcp_congestion(&socket, congestion).is_err() {
-                log::error!("Failed to set tcp congestion");
+                log::warn!("Failed to set tcp congestion");
             };
         }
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
                 if tcp_options::set_tcp_bind_device(&socket, &interface).is_err() {
-                    log::error!("Failed to set bind to device");
+                    log::warn!("Failed to set bind to device");
                 };
             }
         }
@@ -89,7 +89,7 @@ pub fn get_interface(ipv4: bool, interface: &str) -> IpAddr {
     });
 
     if ip.is_none() {
-        log::error!(
+        log::warn!(
             "interface {} not found or interface does not provide IPv6",
             &interface
         );

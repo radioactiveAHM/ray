@@ -102,7 +102,7 @@ where
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
                 if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() {
-                    log::error!("Failed to set bind to device");
+                    log::warn!("Failed to set bind to device");
                 };
             }
         }

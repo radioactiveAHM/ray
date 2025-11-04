@@ -140,12 +140,12 @@ async fn app() {
                                 )
                                 .await
                                 {
-                                    log::error!("TLS: {e}")
+                                    log::warn!("TLS: {e}")
                                 }
                             });
                         }
                         Err(e) => {
-                            log::error!("TLS: {e}")
+                            log::warn!("TLS: {e}")
                         }
                     }
                 }
@@ -165,7 +165,7 @@ async fn app() {
                                 )
                                 .await
                             {
-                                log::error!("NOTLS: {e}")
+                                log::warn!("NOTLS: {e}")
                             }
                         });
                     }
@@ -237,16 +237,12 @@ where
             }
         }
         config::Transporter::WS(ws_options) => {
-            let mut ws_c = tokio_websockets::Config::default();
-            if let Some(threshold) = ws_options.threshold {
-                ws_c = ws_c.flush_threshold(threshold * 1024);
-            }
-            if let Some(frame_size) = ws_options.frame_size {
-                ws_c = ws_c.frame_size(frame_size * 1024);
-            }
             drop(buff);
             if let Ok((req, ws)) = tokio_websockets::ServerBuilder::new()
-                .config(ws_c)
+                .config(
+                    tokio_websockets::Config::default()
+                        .frame_size(ws_options.frame_size.unwrap_or(1024) * 1024),
+                )
                 .accept(stream)
                 .await
             {
@@ -279,11 +275,15 @@ where
     let payload = buff[..size].to_vec();
     drop(buff);
     if let Err(e) = match vless.rt {
-        vless::RequestCommand::TCP => handle_tcp(vless, payload, stream, sockopt).await,
-        vless::RequestCommand::UDP => handle_udp(vless, payload, stream, sockopt).await,
+        vless::RequestCommand::TCP => {
+            handle_tcp(vless, payload, &mut stream, sockopt, CONFIG.tcp_fill_buffer).await
+        }
+        vless::RequestCommand::UDP => {
+            handle_udp(vless, payload, &mut stream, sockopt, CONFIG.tcp_fill_buffer).await
+        }
         vless::RequestCommand::MUX => {
             mux::xudp(
-                stream,
+                &mut stream,
                 payload,
                 resolver,
                 CONFIG.udp_proxy_buffer_size.unwrap_or(8),
@@ -293,11 +293,12 @@ where
             .await
         }
     } {
-        log::error!("{peer_addr}: {e}");
+        log::warn!("{peer_addr}: {e}");
     } else {
-        log::error!("{peer_addr}: closed connection")
+        log::warn!("{peer_addr}: closed connection")
     }
 
+    let _ = stream.shutdown().await;
     Ok(())
 }
 
@@ -306,6 +307,7 @@ async fn handle_tcp<S>(
     payload: Vec<u8>,
     mut stream: S,
     sockopt: config::SockOpt,
+    tcp_fill_buffer: bool,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -334,13 +336,12 @@ where
     let mut target_r_pin = std::pin::Pin::new(&mut target_r);
     let mut target_w_pin = std::pin::Pin::new(&mut target_w);
 
-    let err: tokio::io::Error;
     loop {
         let operation = tokio::time::timeout(
             std::time::Duration::from_secs(CONFIG.tcp_idle_timeout),
             async {
                 tokio::select! {
-                    piping = pipe::copy(&mut client_r_pin, &mut target_w_pin, &mut client_buf_rb, CONFIG.tcp_fill_buffer) => {
+                    piping = pipe::copy(&mut client_r_pin, &mut target_w_pin, &mut client_buf_rb, tcp_fill_buffer) => {
                         piping
                     },
                     piping = pipe::copy(&mut target_r_pin, &mut client_w_pin, &mut target_buf_rb, CONFIG.tcp_fill_buffer) => {
@@ -353,19 +354,16 @@ where
 
         match operation {
             Err(_) => {
-                err = tokio::io::Error::other("Timeout");
-                break;
+                let _ = target.shutdown().await;
+                return Err(tokio::io::Error::other("Timeout"));
             }
             Ok(Err(e)) => {
-                err = e;
-                break;
+                let _ = target.shutdown().await;
+                return Err(e);
             }
             _ => (),
         }
     }
-    let _ = client_w.shutdown().await;
-    let _ = target_w.shutdown().await;
-    Err(err)
 }
 
 async fn handle_udp<S>(
@@ -373,6 +371,7 @@ async fn handle_udp<S>(
     payload: Vec<u8>,
     stream: S,
     sockopt: config::SockOpt,
+    tcp_fill_buffer: bool,
 ) -> tokio::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -391,7 +390,7 @@ where
         if sockopt.bind_to_device {
             if let Some(interface) = &sockopt.interface {
                 if tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() {
-                    log::error!("Failed to set bind to device")
+                    log::warn!("Failed to set bind to device")
                 };
             }
         }
@@ -424,13 +423,12 @@ where
 
     let _ = client_w_pin.write(&[0, 0]).await?;
 
-    let err: tokio::io::Error;
     loop {
         let operation = tokio::time::timeout(
             std::time::Duration::from_secs(CONFIG.udp_idle_timeout),
             async {
                 tokio::select! {
-                    piping = pipe::copy(&mut client_r_pin, &mut uw_pin, &mut client_buf_rb, CONFIG.tcp_fill_buffer) => {
+                    piping = pipe::copy(&mut client_r_pin, &mut uw_pin, &mut client_buf_rb, tcp_fill_buffer) => {
                         piping
                     },
                     piping = ur.copy(&mut client_w_pin) => {
@@ -443,16 +441,12 @@ where
 
         match operation {
             Err(_) => {
-                err = tokio::io::Error::other("Timeout");
-                break;
+                return Err(tokio::io::Error::other("Timeout"));
             }
             Ok(Err(e)) => {
-                err = e;
-                break;
+                return Err(e);
             }
             _ => (),
         }
     }
-    let _ = client_w.shutdown().await;
-    Err(err)
 }

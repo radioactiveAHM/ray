@@ -121,9 +121,8 @@ WS
     "transporter": {
         "WS": {
             "path": "/",
-            "host": "example.com", // If set null any host will be accepted
-            "threshold": null, // The default is 8 KiB.
-            "frame_size": null // Max Outgoing frame size. The default is 4MiB. Unit is Kb.
+            "host": "example.com", // If set null any host will be accepted.
+            "frame_size": null // Max Outgoing frame size. The default is 1MB. Unit is Kb.
         }
     }
 ```

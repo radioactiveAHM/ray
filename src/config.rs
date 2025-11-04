@@ -34,7 +34,6 @@ pub struct Http {
 pub struct Ws {
     pub path: String,
     pub host: Option<String>,
-    pub threshold: Option<usize>,
     pub frame_size: Option<usize>,
 }
 
