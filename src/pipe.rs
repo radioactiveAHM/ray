@@ -105,20 +105,20 @@ where
     }
 }
 
-pub struct Flush<'a, 'b, W>(pub &'a mut std::pin::Pin<&'b mut W>);
-impl<'a, 'b, W> Future for Flush<'a, 'b, W>
-where
-    W: AsyncWriteExt + Unpin,
-{
-    type Output = tokio::io::Result<()>;
-    #[inline(always)]
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        self.0.as_mut().poll_flush(cx)
-    }
-}
+// pub struct Flush<'a, 'b, W>(pub &'a mut std::pin::Pin<&'b mut W>);
+// impl<'a, 'b, W> Future for Flush<'a, 'b, W>
+// where
+//     W: AsyncWriteExt + Unpin,
+// {
+//     type Output = tokio::io::Result<()>;
+//     #[inline(always)]
+//     fn poll(
+//         mut self: std::pin::Pin<&mut Self>,
+//         cx: &mut std::task::Context<'_>,
+//     ) -> std::task::Poll<Self::Output> {
+//         self.0.as_mut().poll_flush(cx)
+//     }
+// }
 
 #[inline(always)]
 pub async fn read_timeout<R>(

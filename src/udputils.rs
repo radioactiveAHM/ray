@@ -16,7 +16,6 @@ impl UdpReader<'_> {
         let size = self.udp.recv(&mut self.buf[2..]).await?;
         self.buf[0..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
         let _ = crate::pipe::Write(w, &self.buf[..size + 2]).await?;
-        crate::pipe::Flush(w).await?;
         Ok(())
     }
 }
