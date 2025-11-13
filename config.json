@@ -9,7 +9,7 @@
 		"thread_keep_alive": null
 	},
 	"log": {
-		"level": "error",
+		"level": "warn",
 		"file": "l.log"
 	},
 	"tcp_fill_buffer": true,
