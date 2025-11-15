@@ -20,8 +20,8 @@ where
 
         if let Some(head) = http.lines().next() {
             if head != format!("{} {} HTTP/1.1", chttp.method, chttp.path) {
-                let _ = stream
-                    .write(b"HTTP/1.1 404 Not Found\r\nconnection: close\r\n\r\n")
+                stream
+                    .write_all(b"HTTP/1.1 404 Not Found\r\nconnection: close\r\n\r\n")
                     .await?;
                 return Err(crate::verror::VError::TransporterError.into());
             }
@@ -32,8 +32,7 @@ where
         return Err(crate::verror::VError::UTF8Err.into());
     }
 
-    let _ = stream.write(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n").await?;
-    Ok(())
+    stream.write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n").await
 }
 
 pub async fn http_transporter<S>(
@@ -54,8 +53,8 @@ where
         }
         if let Some(head) = http.lines().next() {
             if head != format!("{} {} HTTP/1.1", chttp.method, chttp.path) {
-                let _ = stream
-                    .write(b"HTTP/1.1 404 Not Found\r\nconnection: close\r\n\r\n")
+                stream
+                    .write_all(b"HTTP/1.1 404 Not Found\r\nconnection: close\r\n\r\n")
                     .await?;
                 return Err(crate::verror::VError::TransporterError.into());
             }
@@ -208,6 +207,5 @@ where
         log::warn!("{peer_addr}: closed connection");
     }
 
-    let _ = wst.shutdown().await;
-    Ok(())
+    wst.shutdown().await
 }

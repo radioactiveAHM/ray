@@ -1,4 +1,4 @@
-use tokio::io::AsyncWrite;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::utils::{self, convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
 
@@ -15,8 +15,7 @@ impl UdpReader<'_> {
     ) -> tokio::io::Result<()> {
         let size = self.udp.recv(&mut self.buf[2..]).await?;
         self.buf[0..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
-        let _ = crate::pipe::Write(w, &self.buf[..size + 2]).await?;
-        Ok(())
+        w.write_all(&self.buf[..size + 2]).await
     }
 }
 

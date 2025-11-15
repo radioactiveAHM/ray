@@ -137,7 +137,7 @@ pub async fn copy_u2t<W>(
 where
     W: AsyncWrite + Unpin,
 {
-    let _ = w.write([0, 0].as_slice()).await?;
+    w.write_all(&[0, 0]).await?;
     // K: Keep Sub Connections (Keep)
     //                       H Len   ID   K Opt UDP
     //                       |___|  |--|  |  |  |
@@ -169,18 +169,17 @@ where
                 target_addr
             }
         };
-        let _ = w
-            .write(
-                &[
-                    &head,
-                    port.as_slice(),
-                    &addrtype_and_addr,
-                    convert_u16_to_two_u8s_be(packet_len as u16).as_slice(),
-                    &buff[..packet_len],
-                ]
-                .concat(),
-            )
-            .await?;
+        w.write_all(
+            &[
+                &head,
+                port.as_slice(),
+                &addrtype_and_addr,
+                convert_u16_to_two_u8s_be(packet_len as u16).as_slice(),
+                &buff[..packet_len],
+            ]
+            .concat(),
+        )
+        .await?;
     }
 }
 

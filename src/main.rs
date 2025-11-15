@@ -231,7 +231,7 @@ where
                 let head = &buff[..p.1];
                 transporters::http_transporter(http, head, &mut stream).await?;
                 size -= buff.drain(..p.1).len();
-                let _ = stream.write(b"HTTP/1.1 200 Ok\r\n\r\n").await?;
+                stream.write_all(b"HTTP/1.1 200 Ok\r\n\r\n").await?;
             } else {
                 return Err(crate::verror::VError::TransporterError.into());
             }
@@ -298,8 +298,7 @@ where
         log::warn!("{peer_addr}: closed connection")
     }
 
-    let _ = stream.shutdown().await;
-    Ok(())
+    stream.shutdown().await
 }
 
 async fn handle_tcp<S>(
@@ -316,13 +315,13 @@ where
     let mut target = tcp::stream(*target_addr, &sockopt).await?;
 
     if !&payload[*body..].is_empty() {
-        let _ = target.write(&payload[*body..]).await?;
+        target.write_all(&payload[*body..]).await?;
     }
     drop(payload);
 
     let tpbs = CONFIG.tcp_proxy_buffer_size.unwrap_or(8);
 
-    let _ = stream.write(&[0, 0]).await?;
+    stream.write_all(&[0, 0]).await?;
 
     let mut client_buf = vec![0; 1024 * tpbs];
     let mut client_buf_rb = tokio::io::ReadBuf::new(&mut client_buf);
@@ -421,7 +420,7 @@ where
         buf: vec![0; CONFIG.udp_proxy_buffer_size.unwrap_or(8) * 1024],
     };
 
-    let _ = client_w_pin.write(&[0, 0]).await?;
+    client_w_pin.write_all(&[0, 0]).await?;
 
     loop {
         let operation = tokio::time::timeout(

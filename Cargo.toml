@@ -24,7 +24,7 @@ serde_json = "1.0.145"
 hickory-resolver = { version = "0.25.2", default-features = false, features = ["tokio", "https-aws-lc-rs", "h3-aws-lc-rs", "quic-aws-lc-rs", "tls-aws-lc-rs", "webpki-roots"] }
 tokio-websockets = { version = "0.13.0", features = ["server", "sha1_smol"] }
 futures-util = "0.3.31"
-bytes = "1.10.1"
+bytes = "1.11.0"
 local-ip-address = "0.6.5"
 libc = "0.2.177"
 log = "0.4.28"

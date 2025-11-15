@@ -17,12 +17,12 @@ where
     if fill_buf {
         let res = Fill(r, buf).await;
         if !buf.filled().is_empty() {
-            Write(w, buf.filled()).await?;
+            w.write_all(buf.filled()).await?;
         }
         res?;
     } else {
         Read(r, buf).await?;
-        Write(w, buf.filled()).await?;
+        w.write_all(buf.filled()).await?;
     }
     buf.clear();
     Ok(())
@@ -97,37 +97,6 @@ where
         }
     }
 }
-
-pub struct Write<'a, 'b, W>(pub &'a mut std::pin::Pin<&'b mut W>, pub &'a [u8]);
-impl<'a, 'b, W> Future for Write<'a, 'b, W>
-where
-    W: AsyncWriteExt + Unpin,
-{
-    type Output = tokio::io::Result<usize>;
-    #[inline(always)]
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        let this = &mut *self;
-        this.0.as_mut().poll_write(cx, this.1)
-    }
-}
-
-// pub struct Flush<'a, 'b, W>(pub &'a mut std::pin::Pin<&'b mut W>);
-// impl<'a, 'b, W> Future for Flush<'a, 'b, W>
-// where
-//     W: AsyncWriteExt + Unpin,
-// {
-//     type Output = tokio::io::Result<()>;
-//     #[inline(always)]
-//     fn poll(
-//         mut self: std::pin::Pin<&mut Self>,
-//         cx: &mut std::task::Context<'_>,
-//     ) -> std::task::Poll<Self::Output> {
-//         self.0.as_mut().poll_flush(cx)
-//     }
-// }
 
 #[inline(always)]
 pub async fn read_timeout<R>(
