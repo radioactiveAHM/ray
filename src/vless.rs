@@ -4,7 +4,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use crate::utils::convert_two_u8s_to_u16_be;
 use crate::verror::VError;
 
-fn parse_socket(s: u8) -> Result<RequestCommand, VError> {
+const fn parse_socket(s: u8) -> Result<RequestCommand, VError> {
 	if s == 1 {
 		Ok(RequestCommand::TCP)
 	} else if s == 2 {
