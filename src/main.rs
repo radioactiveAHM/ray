@@ -82,7 +82,7 @@ async fn app() {
 		log::error!("{message}");
 	}));
 
-	{
+	if let Some(level) = &CONFIG.log.level {
 		let mut logger = env_logger::builder();
 		#[cfg(not(debug_assertions))]
 		{
@@ -97,7 +97,7 @@ async fn app() {
 			}
 		}
 		// Level order: Error, Warn, Info, Debug, Trace
-		logger.filter_level(CONFIG.log.level.convert()).init();
+		logger.filter_level(level.into()).init();
 	}
 
 	let resolver = Arc::new(resolver::generate_resolver(&CONFIG.resolver));

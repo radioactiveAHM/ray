@@ -29,8 +29,8 @@
         "thread_keep_alive": null // null for default. In seconds.
     },
     "log": {
-        "level": "error", // off, error, warn, info, debug, trace
-        "file": "l.log"
+        "level": "warn", // error, warn, info, debug, trace. set null to disable
+        "file": "l.log" // set null to log to Stdout
     },
     "tcp_fill_buffer": false, // Enable multiple read attempts to fill the buffer.
     "tcp_proxy_buffer_size": null, // The internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
