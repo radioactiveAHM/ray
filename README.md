@@ -13,7 +13,7 @@
 
 - [x] TCP
 - [x] UDP
-- [x] XUDP: Supporting complete udp mux.
+- [x] XUDP
 
 ## Configuration File `config.json`
 

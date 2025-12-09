@@ -77,11 +77,6 @@ fn main() {
 }
 
 async fn app() {
-	// Log panic info
-	std::panic::set_hook(Box::new(|message| {
-		log::error!("{message}");
-	}));
-
 	if let Some(level) = &CONFIG.log.level {
 		let mut logger = env_logger::builder();
 		#[cfg(not(debug_assertions))]
@@ -99,6 +94,13 @@ async fn app() {
 		// Level order: Error, Warn, Info, Debug, Trace
 		logger.filter_level(level.into()).init();
 	}
+
+	// Log panic info
+	std::panic::set_hook(Box::new(|message| {
+		log::error!("{message}");
+	}));
+
+	log::set_max_level(log::LevelFilter::Trace);
 
 	let resolver = Arc::new(resolver::generate_resolver(&CONFIG.resolver));
 
