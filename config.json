@@ -32,7 +32,8 @@
 				"max_fragment_size": null,
 				"alpn": ["h2", "http/1.1"],
 				"certificate": "cert.pem",
-				"key": "key.pem"
+				"key": "key.pem",
+				"buffer_limit": 64
 			},
 			"sockopt": {
 				"interface": null,

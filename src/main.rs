@@ -22,6 +22,7 @@ mod udputils;
 mod utils;
 mod verror;
 mod vless;
+mod xhttp;
 
 static CONFIG: std::sync::LazyLock<config::Config> = std::sync::LazyLock::new(config::load_config);
 
@@ -102,7 +103,7 @@ async fn app() {
 
 	log::set_max_level(log::LevelFilter::Trace);
 
-	let resolver = Arc::new(resolver::generate_resolver(&CONFIG.resolver));
+	let resolver = resolver::generate_resolver(&CONFIG.resolver);
 
 	for inbound in &CONFIG.inbounds {
 		let resolver = resolver.clone();
@@ -123,8 +124,23 @@ async fn app() {
 				c.max_fragment_size = inbound.tls.max_fragment_size;
 				let acceptor = TlsAcceptor::from(Arc::new(c));
 
+				if let Some(xhttp) = inbound.transporter.grab_xhttp() {
+					if !inbound.tls.enable {
+						panic!("enable tls for xhttp")
+					}
+					return xhttp::xhttp_server(
+						resolver,
+						tcp,
+						acceptor,
+						inbound.tls.buffer_limit,
+						xhttp,
+						inbound.sockopt.clone(),
+					)
+					.await;
+				}
+
 				loop {
-					match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
+					match tls::Tc::new(acceptor.clone(), tcp.accept().await, inbound.tls.buffer_limit) {
 						Ok(tc) => {
 							let resolver = resolver.clone();
 							tokio::spawn(async move {
@@ -172,11 +188,7 @@ async fn app() {
 
 async fn tls_handler(
 	tc: tls::Tc,
-	resolver: Arc<
-		hickory_resolver::Resolver<
-			hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,
-		>,
-	>,
+	resolver: resolver::RS,
 	transport: config::Transporter,
 	sockopt: config::SockOpt,
 ) -> tokio::io::Result<()> {
@@ -189,11 +201,7 @@ async fn tls_handler(
 async fn stream_handler<S>(
 	mut stream: S,
 	peer_addr: SocketAddr,
-	resolver: Arc<
-		hickory_resolver::Resolver<
-			hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,
-		>,
-	>,
+	resolver: resolver::RS,
 	transport: config::Transporter,
 	sockopt: config::SockOpt,
 ) -> tokio::io::Result<()>
@@ -249,6 +257,9 @@ where
 			} else {
 				return Err(verror::VError::TransporterError.into());
 			}
+		}
+		config::Transporter::XHTTP(_) => {
+			return Ok(());
 		}
 	}
 
@@ -347,16 +358,14 @@ async fn handle_udp<S>(
 	vless: vless::Vless,
 	payload: Vec<u8>,
 	stream: S,
-	sockopt: config::SockOpt,
+	_sockopt: config::SockOpt,
 	tcp_fill_buffer: bool,
 ) -> tokio::io::Result<()>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
 	let (target, body) = vless.target.as_ref().unwrap();
-	let ip = if let Some(interface) = &sockopt.interface {
-		tcp::get_interface(target.is_ipv4(), interface)
-	} else if target.is_ipv4() {
+	let ip = if target.is_ipv4() {
 		IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 	} else {
 		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
@@ -364,8 +373,8 @@ where
 	let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
 	#[cfg(target_os = "linux")]
 	{
-		if sockopt.bind_to_device {
-			if let Some(interface) = &sockopt.interface {
+		if _sockopt.bind_to_device {
+			if let Some(interface) = &_sockopt.interface {
 				if tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() {
 					log::warn!("Failed to set bind to device")
 				};

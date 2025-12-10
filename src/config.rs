@@ -21,6 +21,7 @@ pub struct Tls {
 	pub alpn: Vec<String>,
 	pub certificate: String,
 	pub key: String,
+	pub buffer_limit: Option<usize>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -38,12 +39,34 @@ pub struct Ws {
 }
 
 #[derive(serde::Deserialize, Clone)]
+pub struct Xhttp {
+	pub path: String,
+	pub host: Option<String>,
+
+	// h2 config
+	pub max_frame_size: u32,
+	pub max_send_buffer_size: Option<usize>,
+	pub initial_connection_window_size: Option<u32>,
+	pub initial_window_size: Option<u32>,
+}
+
+#[derive(serde::Deserialize, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Transporter {
 	TCP,
 	HTTP(Http),
 	HttpUpgrade(Http),
 	WS(Ws),
+	XHTTP(Xhttp),
+}
+
+impl Transporter {
+	pub fn grab_xhttp(&self) -> Option<Xhttp> {
+		match self {
+			Self::XHTTP(xhttp) => Some(xhttp.clone()),
+			_ => None,
+		}
+	}
 }
 
 fn deserialize_uuid<'de, D>(deserializer: D) -> Result<uuid::Uuid, D::Error>
@@ -97,7 +120,7 @@ pub struct Resolver {
 	pub num_concurrent_reqs: usize,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Default)]
 #[allow(dead_code)]
 pub struct SockOpt {
 	pub interface: Option<String>,

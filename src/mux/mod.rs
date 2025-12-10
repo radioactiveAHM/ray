@@ -2,8 +2,7 @@ use std::{
 	cell::RefCell,
 	collections::HashMap,
 	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
-	pin::Pin,
-	sync::Arc,
+	pin::Pin
 };
 
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
@@ -20,9 +19,7 @@ use crate::{
 #[inline(always)]
 async fn parse_target(
 	buff: &[u8],
-	resolver: &hickory_resolver::Resolver<
-		hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,
-	>,
+	resolver: &crate::resolver::RS,
 	domain_map: RefCell<HashMap<IpAddr, String>>,
 ) -> Result<SocketAddr, VError> {
 	let port = convert_two_u8s_to_u16_be([buff[5], buff[6]]);
@@ -70,13 +67,9 @@ async fn parse_target(
 pub async fn xudp<S>(
 	stream: S,
 	mut buffer: Vec<u8>,
-	resolver: Arc<
-		hickory_resolver::Resolver<
-			hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,
-		>,
-	>,
+	resolver: crate::resolver::RS,
 	buf_size: usize,
-	sockopt: crate::config::SockOpt,
+	_sockopt: crate::config::SockOpt,
 	peer_ip: IpAddr,
 ) -> tokio::io::Result<()>
 where
@@ -85,9 +78,7 @@ where
 	// remove vless head
 	buffer.drain(..19);
 
-	let ip = if let Some(interface) = &sockopt.interface {
-		crate::tcp::get_interface(peer_ip.is_ipv4(), interface)
-	} else if peer_ip.is_ipv4() {
+	let ip = if peer_ip.is_ipv4() {
 		IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 	} else {
 		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
@@ -95,8 +86,8 @@ where
 	let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
 	#[cfg(target_os = "linux")]
 	{
-		if sockopt.bind_to_device {
-			if let Some(interface) = &sockopt.interface {
+		if _sockopt.bind_to_device {
+			if let Some(interface) = &_sockopt.interface {
 				if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() {
 					log::warn!("Failed to set bind to device");
 				};
@@ -180,11 +171,7 @@ pub async fn copy_t2u<R>(
 	b0: Vec<u8>,
 	domain_map: RefCell<HashMap<IpAddr, String>>,
 	buf_size: usize,
-	resolver: Arc<
-		hickory_resolver::Resolver<
-			hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,
-		>,
-	>,
+	resolver: crate::resolver::RS,
 ) -> tokio::io::Result<()>
 where
 	R: AsyncRead + Unpin,
@@ -201,11 +188,7 @@ async fn handle_xudp_packets<R>(
 	udp: &tokio::net::UdpSocket,
 	mut internal_buf: Vec<u8>,
 	domain_map: RefCell<HashMap<IpAddr, String>>,
-	resolver: Arc<
-		hickory_resolver::Resolver<
-			hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,
-		>,
-	>,
+	resolver: crate::resolver::RS,
 ) -> tokio::io::Result<()>
 where
 	R: AsyncRead + Unpin,

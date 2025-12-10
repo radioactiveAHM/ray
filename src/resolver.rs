@@ -1,12 +1,14 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use hickory_resolver::{Resolver, config::NameServerConfigGroup, name_server::TokioConnectionProvider};
 
 use crate::verror::VError;
 
-pub fn generate_resolver(
-	rc: &crate::config::Resolver,
-) -> Resolver<hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>> {
+pub type RS = Arc<
+	Resolver<hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>>,
+>;
+
+pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
 	let protocol = if let Some(addr) = &rc.resolver {
 		let mut parts = addr.split("://");
 		if let Some(scheme) = parts.next()
@@ -53,12 +55,14 @@ pub fn generate_resolver(
 	options.timeout = std::time::Duration::from_secs(rc.timeout);
 	options.num_concurrent_reqs = rc.num_concurrent_reqs;
 
-	Resolver::builder_with_config(
-		hickory_resolver::config::ResolverConfig::from_parts(None, Vec::new(), protocol),
-		TokioConnectionProvider::default(),
+	Arc::new(
+		Resolver::builder_with_config(
+			hickory_resolver::config::ResolverConfig::from_parts(None, Vec::new(), protocol),
+			TokioConnectionProvider::default(),
+		)
+		.with_options(options)
+		.build(),
 	)
-	.with_options(options)
-	.build()
 }
 
 pub async fn resolve(

@@ -1,13 +1,9 @@
-use std::{
-	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-	str::FromStr,
-};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use tokio::net::{TcpSocket, TcpStream};
 
 #[inline(always)]
-#[allow(unused_variables)]
-pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpSocket> {
+pub fn tcpsocket(a: SocketAddr, _sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpSocket> {
 	let socket: TcpSocket = if a.is_ipv4() {
 		tokio::net::TcpSocket::new_v4()?
 	} else {
@@ -16,18 +12,18 @@ pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::
 
 	#[cfg(target_os = "linux")]
 	{
-		if let Some(mss) = sockopt.mss {
+		if let Some(mss) = _sockopt.mss {
 			if tcp_options::set_tcp_mss(&socket, mss).is_err() {
 				log::warn!("Failed to set tcp mss");
 			};
 		}
-		if let Some(congestion) = &sockopt.congestion {
+		if let Some(congestion) = &_sockopt.congestion {
 			if tcp_options::set_tcp_congestion(&socket, congestion).is_err() {
 				log::warn!("Failed to set tcp congestion");
 			};
 		}
-		if sockopt.bind_to_device {
-			if let Some(interface) = &sockopt.interface {
+		if _sockopt.bind_to_device {
+			if let Some(interface) = &_sockopt.interface {
 				if tcp_options::set_tcp_bind_device(&socket, &interface).is_err() {
 					log::warn!("Failed to set bind to device");
 				};
@@ -56,45 +52,13 @@ pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::
 
 #[inline(always)]
 pub async fn stream(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpStream> {
-	let ip = if let Some(interface) = &sockopt.interface {
-		get_interface(a.is_ipv4(), interface)
-	} else if a.is_ipv4() {
+	let ip = if a.is_ipv4() {
 		IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 	} else {
 		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
 	};
 
 	tcpsocket(SocketAddr::new(ip, 0), sockopt)?.connect(a).await
-}
-
-#[inline(always)]
-pub fn get_interface(ipv4: bool, interface: &str) -> IpAddr {
-	// if user input ip as interface
-	if let Ok(ip) = IpAddr::from_str(interface) {
-		return ip;
-	}
-	// Cause panic if it fails, informing the user that the binding interface is not available.
-	let interfaces = local_ip_address::list_afinet_netifas().expect("binding interface is not available");
-
-	let ip = interfaces.iter().find(|i| {
-		if ipv4 {
-			i.0.as_str().to_lowercase() == interface.to_lowercase() && i.1.is_ipv4()
-		} else {
-			i.0.as_str().to_lowercase() == interface.to_lowercase() && i.1.is_ipv6()
-		}
-	});
-
-	if ip.is_none() {
-		log::warn!("interface {} not found or interface does not provide IPv6", &interface);
-		// fallback
-		if ipv4 {
-			return IpAddr::V4(Ipv4Addr::UNSPECIFIED);
-		} else {
-			return IpAddr::V6(Ipv6Addr::UNSPECIFIED);
-		}
-	}
-
-	ip.unwrap().1
 }
 
 #[cfg(target_os = "linux")]

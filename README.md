@@ -8,6 +8,8 @@
 - [x] HTTP
 - [x] HTTP Upgrade
 - [x] WS (WebSocket)
+- [x] XHTTP H2 stream-one
+- [ ] XHTTP H2 stream-up
 
 ## Vless Request Commands
 
@@ -53,7 +55,8 @@
                 "max_fragment_size": null, // The maximum size of plaintext input to be emitted in a single TLS record. A value of null is equivalent to the TLS maximum of 16 kB.
                 "alpn": ["h2", "http/1.1"],
                 "certificate": "cert.pem", // Certificate Path
-                "key": "key.pem" // Key Path
+                "key": "key.pem", // Key Path
+                "buffer_limit": 64
             },
             "sockopt": {
                 "interface": null, // Bind interface/Adaptor
@@ -124,6 +127,21 @@ WS
             "host": "example.com", // If set null any host will be accepted.
             "frame_size": null // Max Outgoing frame size. The default is 1MB. Unit is Kb.
         }
+    }
+```
+
+XHTTP
+
+```json
+    "transporter": {
+    "XHTTP" : {
+        "path": "/",
+        "host": "example.com", // If set null any host will be accepted.
+        "max_frame_size": 8, // must be less or equal to tcp_proxy_buffer_size. Unit is Kb.
+        "max_send_buffer_size": 1024, // Sets the maximum send buffer size per stream. Unit is Kb.
+        "initial_connection_window_size": 16384, // Indicates the initial window size (in octets) for connection-level flow control for received data. Unit is Kb.
+        "initial_window_size": 1024 // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.
+    }
     }
 ```
 

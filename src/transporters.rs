@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use futures_util::{Sink, SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
@@ -144,11 +142,7 @@ where
 
 pub async fn websocket_transport<S>(
 	mut ws: tokio_websockets::WebSocketStream<S>,
-	resolver: Arc<
-		hickory_resolver::Resolver<
-			hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,
-		>,
-	>,
+	resolver: crate::resolver::RS,
 	peer_addr: std::net::SocketAddr,
 	sockopt: crate::config::SockOpt,
 ) -> tokio::io::Result<()>
