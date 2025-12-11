@@ -163,21 +163,10 @@ where
 
 	let mut wst = Wst { ws, closed: false };
 	if let Err(e) = match vless.rt {
-		crate::vless::RequestCommand::TCP => {
-			// not supported by WS -----------------------------------------------------|     |
-			crate::handle_tcp(vless, payload, &mut wst, sockopt, false).await
-		}
-		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload, &mut wst, sockopt, false).await,
+		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload, &mut wst, sockopt).await,
+		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload, &mut wst, sockopt).await,
 		crate::vless::RequestCommand::MUX => {
-			crate::mux::xudp(
-				&mut wst,
-				payload,
-				resolver,
-				crate::CONFIG.udp_proxy_buffer_size.unwrap_or(8),
-				sockopt,
-				peer_addr.ip(),
-			)
-			.await
+			crate::mux::xudp(&mut wst, payload, resolver, sockopt, peer_addr.ip()).await
 		}
 	} {
 		log::warn!("{peer_addr}: {e}");

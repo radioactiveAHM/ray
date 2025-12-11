@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use crate::{CONFIG, resolver::RS};
+use crate::resolver::RS;
 use bytes::Bytes;
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -24,14 +24,13 @@ pub async fn xhttp_server(
 	resolver: RS,
 	tcp: tokio::net::TcpListener,
 	acceptor: tokio_rustls::TlsAcceptor,
-	buffer_limit: Option<usize>,
 	transport: crate::config::Xhttp,
 	sockopt: crate::config::SockOpt,
 ) {
 	let builder = h2_builder(&transport);
 	let http_head: Arc<(Option<String>, String)> = Arc::new((transport.host, transport.path));
 	loop {
-		match crate::tls::Tc::new(acceptor.clone(), tcp.accept().await, buffer_limit) {
+		match crate::tls::Tc::new(acceptor.clone(), tcp.accept().await) {
 			Ok(tc) => {
 				let resolver = resolver.clone();
 				let builder = builder.clone();
@@ -45,13 +44,13 @@ pub async fn xhttp_server(
 							}
 						}
 						Err(e) => {
-							log::warn!("{e}");
+							log::warn!("tls {e}");
 						}
 					}
 				});
 			}
 			Err(e) => {
-				log::warn!("TLS: {e}")
+				log::warn!("socket: {e}")
 			}
 		}
 	}
@@ -128,18 +127,10 @@ async fn stream_one(
 		stream: (req.into_body(), w),
 	};
 	match vless.rt {
-		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, sockopt, false).await,
-		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, sockopt, false).await,
+		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, sockopt).await,
+		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, sockopt).await,
 		crate::vless::RequestCommand::MUX => {
-			crate::mux::xudp(
-				&mut h2t,
-				payload.to_vec(),
-				resolver,
-				CONFIG.udp_proxy_buffer_size.unwrap_or(8),
-				sockopt,
-				peer_addr.ip(),
-			)
-			.await
+			crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, sockopt, peer_addr.ip()).await
 		}
 	}
 }
@@ -186,14 +177,6 @@ impl AsyncRead for H2t {
 		buf: &mut tokio::io::ReadBuf<'_>,
 	) -> std::task::Poll<std::io::Result<()>> {
 		let this = &mut *self;
-		if this.stream.0.flow_control().available_capacity() == 0 {
-			let used = this.stream.0.flow_control().used_capacity();
-			this.stream
-				.0
-				.flow_control()
-				.release_capacity(used)
-				.map_err(tokio::io::Error::other)?;
-		}
 		match std::task::ready!(this.stream.0.poll_data(cx)) {
 			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
 				std::io::ErrorKind::ConnectionAborted,
@@ -202,7 +185,13 @@ impl AsyncRead for H2t {
 			Some(data_res) => {
 				let data = data_res.map_err(tokio::io::Error::other)?;
 				buf.put_slice(&data);
-				std::task::Poll::Ready(Ok(()))
+				std::task::Poll::Ready(
+					this.stream
+						.0
+						.flow_control()
+						.release_capacity(data.len())
+						.map_err(tokio::io::Error::other),
+				)
 			}
 		}
 	}

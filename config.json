@@ -12,7 +12,7 @@
 		"level": "warn",
 		"file": "l.log"
 	},
-	"tcp_fill_buffer": true,
+	"tls_buffer_limit": 64,
 	"tcp_proxy_buffer_size": null,
 	"udp_proxy_buffer_size": null,
 	"tcp_idle_timeout": 150,
@@ -32,8 +32,7 @@
 				"max_fragment_size": null,
 				"alpn": ["h2", "http/1.1"],
 				"certificate": "cert.pem",
-				"key": "key.pem",
-				"buffer_limit": 64
+				"key": "key.pem"
 			},
 			"sockopt": {
 				"interface": null,

@@ -21,7 +21,6 @@ pub struct Tls {
 	pub alpn: Vec<String>,
 	pub certificate: String,
 	pub key: String,
-	pub buffer_limit: Option<usize>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -187,9 +186,9 @@ pub struct Runtime {
 pub struct Config {
 	pub runtime: Runtime,
 	pub log: Log,
-	pub tcp_fill_buffer: bool,
-	pub tcp_proxy_buffer_size: Option<usize>,
-	pub udp_proxy_buffer_size: Option<usize>,
+	pub tls_buffer_limit: usize,
+	pub tcp_proxy_buffer_size: (usize, usize),
+	pub udp_proxy_buffer_size: (usize, usize),
 	pub tcp_idle_timeout: u64,
 	pub udp_idle_timeout: u64,
 	pub users: Vec<User>,

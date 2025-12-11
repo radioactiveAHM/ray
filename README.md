@@ -34,7 +34,7 @@
         "level": "warn", // error, warn, info, debug, trace. set null to disable
         "file": "l.log" // set null to log to Stdout
     },
-    "tcp_fill_buffer": false, // Enable multiple read attempts to fill the buffer.
+    "tls_buffer_limit": 64,
     "tcp_proxy_buffer_size": null, // The internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "udp_proxy_buffer_size": null, // The internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds.
@@ -55,8 +55,7 @@
                 "max_fragment_size": null, // The maximum size of plaintext input to be emitted in a single TLS record. A value of null is equivalent to the TLS maximum of 16 kB.
                 "alpn": ["h2", "http/1.1"],
                 "certificate": "cert.pem", // Certificate Path
-                "key": "key.pem", // Key Path
-                "buffer_limit": 64
+                "key": "key.pem" // Key Path
             },
             "sockopt": {
                 "interface": null, // Bind interface/Adaptor

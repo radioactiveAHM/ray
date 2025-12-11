@@ -122,25 +122,4 @@ pub mod tcp_options {
 			Err(())
 		}
 	}
-	pub fn set_udp_bind_device(socket: &tokio::net::UdpSocket, device: &str) -> Result<(), ()> {
-		if let Ok(device) = std::ffi::CString::new(device) {
-			let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-
-			let result = unsafe {
-				libc::setsockopt(
-					fd,
-					libc::SOL_SOCKET,
-					libc::SO_BINDTODEVICE,
-					device.as_ptr() as *const _,
-					device.to_bytes().len() as libc::socklen_t,
-				)
-			};
-			if result == -1 {
-				return Err(());
-			}
-			Ok(())
-		} else {
-			Err(())
-		}
-	}
 }

@@ -15,12 +15,8 @@ const fn parse_socket(s: u8) -> Result<RequestCommand, VError> {
 		Err(VError::UnknownSocket)
 	}
 }
-async fn parse_target(
-	buff: &[u8],
-	port: u16,
-	resolver: &crate::resolver::RS,
-) -> Result<(SocketAddr, usize), VError> {
-	match buff[21] {
+async fn parse_target(buff: &[u8], port: u16, resolver: &crate::resolver::RS) -> Result<(SocketAddr, usize), VError> {
+	match buff.get(21).ok_or(VError::Unknown)? {
 		1 => {
 			if buff.len() < 26 {
 				return Err(VError::Unknown);
@@ -101,10 +97,7 @@ pub struct Vless {
 }
 
 impl Vless {
-	pub async fn new(
-		buff: &[u8],
-		resolver: &crate::resolver::RS,
-	) -> Result<Self, VError> {
+	pub async fn new(buff: &[u8], resolver: &crate::resolver::RS) -> Result<Self, VError> {
 		if buff.is_empty() {
 			return Err(VError::Unknown);
 		}
@@ -112,7 +105,7 @@ impl Vless {
 			return Err(VError::Unknown);
 		}
 
-		if buff.len() >= 19 && buff[18] == 3 {
+		if buff.len() >= 19 && *buff.get(18).ok_or(VError::Unknown)? == 3 {
 			// mux
 			let mut v = Self {
 				uuid: [0; 16],
@@ -125,10 +118,10 @@ impl Vless {
 			return Ok(v);
 		}
 
-		if buff.len() < 21 {
-			return Err(VError::Unknown);
-		}
-		let port = convert_two_u8s_to_u16_be([buff[19], buff[20]]);
+		let port = convert_two_u8s_to_u16_be([
+			*buff.get(19).ok_or(VError::Unknown)?,
+			*buff.get(20).ok_or(VError::Unknown)?,
+		]);
 		let mut v = Self {
 			uuid: [0; 16],
 			rt: parse_socket(buff[18])?,

@@ -9,6 +9,8 @@ use tokio_rustls::{
 	rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
 
+use crate::utils::convert_u16_to_two_u8s_be;
+
 mod auth;
 mod blacklist;
 mod config;
@@ -128,19 +130,11 @@ async fn app() {
 					if !inbound.tls.enable {
 						panic!("enable tls for xhttp")
 					}
-					return xhttp::xhttp_server(
-						resolver,
-						tcp,
-						acceptor,
-						inbound.tls.buffer_limit,
-						xhttp,
-						inbound.sockopt.clone(),
-					)
-					.await;
+					return xhttp::xhttp_server(resolver, tcp, acceptor, xhttp, inbound.sockopt.clone()).await;
 				}
 
 				loop {
-					match tls::Tc::new(acceptor.clone(), tcp.accept().await, inbound.tls.buffer_limit) {
+					match tls::Tc::new(acceptor.clone(), tcp.accept().await) {
 						Ok(tc) => {
 							let resolver = resolver.clone();
 							tokio::spawn(async move {
@@ -271,19 +265,9 @@ where
 	let payload = buff[..size].to_vec();
 	drop(buff);
 	if let Err(e) = match vless.rt {
-		vless::RequestCommand::TCP => handle_tcp(vless, payload, &mut stream, sockopt, CONFIG.tcp_fill_buffer).await,
-		vless::RequestCommand::UDP => handle_udp(vless, payload, &mut stream, sockopt, CONFIG.tcp_fill_buffer).await,
-		vless::RequestCommand::MUX => {
-			mux::xudp(
-				&mut stream,
-				payload,
-				resolver,
-				CONFIG.udp_proxy_buffer_size.unwrap_or(8),
-				sockopt,
-				peer_addr.ip(),
-			)
-			.await
-		}
+		vless::RequestCommand::TCP => handle_tcp(vless, payload, &mut stream, sockopt).await,
+		vless::RequestCommand::UDP => handle_udp(vless, payload, &mut stream, sockopt).await,
+		vless::RequestCommand::MUX => mux::xudp(&mut stream, payload, resolver, sockopt, peer_addr.ip()).await,
 	} {
 		log::warn!("{peer_addr}: {e}");
 	} else {
@@ -298,7 +282,6 @@ async fn handle_tcp<S>(
 	payload: Vec<u8>,
 	mut stream: S,
 	sockopt: config::SockOpt,
-	tcp_fill_buffer: bool,
 ) -> tokio::io::Result<()>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
@@ -311,13 +294,16 @@ where
 	}
 	drop(payload);
 
-	let tpbs = CONFIG.tcp_proxy_buffer_size.unwrap_or(8);
+	let (r_tpbs, w_tpbs) = (
+		CONFIG.tcp_proxy_buffer_size.0 * 1024,
+		CONFIG.tcp_proxy_buffer_size.1 * 1024,
+	);
 
 	stream.write_all(&[0, 0]).await?;
 
-	let mut client_buf = vec![0; 1024 * tpbs];
+	let mut client_buf = vec![0; r_tpbs];
 	let mut client_buf_rb = tokio::io::ReadBuf::new(&mut client_buf);
-	let mut target_buf = vec![0; 1024 * tpbs];
+	let mut target_buf = vec![0; w_tpbs];
 	let mut target_buf_rb = tokio::io::ReadBuf::new(&mut target_buf);
 
 	let (mut client_r, mut client_w) = tokio::io::split(stream);
@@ -328,25 +314,28 @@ where
 	let mut target_w_pin = std::pin::Pin::new(&mut target_w);
 
 	loop {
-		let operation = tokio::time::timeout(std::time::Duration::from_secs(CONFIG.tcp_idle_timeout), async {
+		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.tcp_idle_timeout), async {
 			tokio::select! {
-				piping = pipe::copy(&mut client_r_pin, &mut target_w_pin, &mut client_buf_rb, tcp_fill_buffer) => {
-					piping
+				read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
+					read?;
+					target_w_pin.write_all(client_buf_rb.filled()).await?;
+					Ok(())
 				},
-				piping = pipe::copy(&mut target_r_pin, &mut client_w_pin, &mut target_buf_rb, CONFIG.tcp_fill_buffer) => {
-					piping
+				read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
+					read?;
+					client_w_pin.write_all(target_buf_rb.filled()).await?;
+					Ok(())
 				},
 			}
 		})
-		.await;
-
-		match operation {
+		.await
+		{
 			Err(_) => {
-				let _ = target.shutdown().await;
+				let _ = target_w_pin.shutdown().await;
 				return Err(tokio::io::Error::other("Timeout"));
 			}
 			Ok(Err(e)) => {
-				let _ = target.shutdown().await;
+				let _ = target_w_pin.shutdown().await;
 				return Err(e);
 			}
 			_ => (),
@@ -359,7 +348,6 @@ async fn handle_udp<S>(
 	payload: Vec<u8>,
 	stream: S,
 	_sockopt: config::SockOpt,
-	tcp_fill_buffer: bool,
 ) -> tokio::io::Result<()>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
@@ -370,27 +358,24 @@ where
 	} else {
 		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
 	};
-	let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
-	#[cfg(target_os = "linux")]
-	{
-		if _sockopt.bind_to_device {
-			if let Some(interface) = &_sockopt.interface {
-				if tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() {
-					log::warn!("Failed to set bind to device")
-				};
-			}
-		}
-	}
+	let udp = udputils::udp_socket(SocketAddr::new(ip, 0), _sockopt).await?;
 	udp.connect(target).await?;
 
 	// first packet might not be complete
+	// todo: caused panic: range start index 28 out of range for slice of length 27
 	if !&payload[*body..].is_empty() {
 		udp.send(&payload[*body + 2..]).await?;
 	}
 	drop(payload);
 
-	let mut client_buf = vec![0; 1024 * CONFIG.udp_proxy_buffer_size.unwrap_or(8)];
+	let (r_upbs, w_upbs) = (
+		CONFIG.udp_proxy_buffer_size.0 * 1024,
+		CONFIG.udp_proxy_buffer_size.1 * 1024,
+	);
+
+	let mut client_buf = vec![0; w_upbs];
 	let mut client_buf_rb = tokio::io::ReadBuf::new(&mut client_buf);
+	let mut udp_buf = vec![0; r_upbs];
 
 	let (mut client_r, mut client_w) = tokio::io::split(stream);
 	let mut client_r_pin = std::pin::Pin::new(&mut client_r);
@@ -398,31 +383,31 @@ where
 
 	let mut uw = udputils::UdpWriter {
 		udp: &udp,
-		b: utils::DeqBuffer::new(CONFIG.udp_proxy_buffer_size.unwrap_or(8) * 1024), // buf_size unit is kb
+		b: utils::DeqBuffer::new(w_upbs),
 	};
 	let mut uw_pin = std::pin::Pin::new(&mut uw);
-
-	let mut ur = udputils::UdpReader {
-		udp: &udp,
-		buf: vec![0; CONFIG.udp_proxy_buffer_size.unwrap_or(8) * 1024],
-	};
 
 	client_w_pin.write_all(&[0, 0]).await?;
 
 	loop {
-		let operation = tokio::time::timeout(std::time::Duration::from_secs(CONFIG.udp_idle_timeout), async {
+		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.udp_idle_timeout), async {
 			tokio::select! {
-				piping = pipe::copy(&mut client_r_pin, &mut uw_pin, &mut client_buf_rb, tcp_fill_buffer) => {
-					piping
+				read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
+					read?;
+					// data buffered in internal buffer so write_all is not needed
+					let _ = uw_pin.write(client_buf_rb.filled()).await?;
+					Ok(())
 				},
-				piping = ur.copy(&mut client_w_pin) => {
-					piping
+				size = udp.recv(&mut udp_buf[2..]) => {
+					let size = size?;
+					udp_buf[0..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
+					client_w_pin.write_all(&udp_buf[..size + 2]).await?;
+					Ok(())
 				},
 			}
 		})
-		.await;
-
-		match operation {
+		.await
+		{
 			Err(_) => {
 				return Err(tokio::io::Error::other("Timeout"));
 			}

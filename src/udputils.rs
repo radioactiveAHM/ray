@@ -1,20 +1,5 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt};
-
-use crate::utils::{self, convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be};
-
-pub struct UdpReader<'a> {
-	pub udp: &'a tokio::net::UdpSocket,
-	pub buf: Vec<u8>,
-}
-
-impl UdpReader<'_> {
-	#[inline(always)]
-	pub async fn copy<W: AsyncWrite + Unpin>(&mut self, w: &mut std::pin::Pin<&mut W>) -> tokio::io::Result<()> {
-		let size = self.udp.recv(&mut self.buf[2..]).await?;
-		self.buf[0..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
-		w.write_all(&self.buf[..size + 2]).await
-	}
-}
+use crate::utils::{self, convert_two_u8s_to_u16_be};
+use tokio::io::AsyncWrite;
 
 pub struct UdpWriter<'a> {
 	pub udp: &'a tokio::net::UdpSocket,
@@ -94,5 +79,62 @@ impl AsyncWrite for UdpWriter<'_> {
 		_cx: &mut std::task::Context<'_>,
 	) -> std::task::Poll<Result<(), std::io::Error>> {
 		std::task::Poll::Ready(Ok(()))
+	}
+}
+
+#[inline(always)]
+pub async fn udp_socket(
+	serve_addrs: std::net::SocketAddr,
+	_sockopt: crate::config::SockOpt,
+) -> tokio::io::Result<tokio::net::UdpSocket> {
+	let ipversion = if serve_addrs.is_ipv4() {
+		socket2::Domain::IPV4
+	} else {
+		socket2::Domain::IPV6
+	};
+
+	let socket: socket2::Socket = socket2::Socket::new(ipversion, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
+
+	// Set Nonblocking
+	if let Err(e) = socket.set_nonblocking(true) {
+		log::warn!("UDP set nonblocking: {e}")
+	}
+
+	#[cfg(target_os = "linux")]
+	{
+		if _sockopt.bind_to_device {
+			if let Some(interface) = &_sockopt.interface {
+				if set_udp_bind_device(&socket, &interface).is_err() {
+					log::warn!("Failed to set bind to device")
+				};
+			}
+		}
+	}
+
+	socket.bind(&serve_addrs.into())?;
+
+	tokio::net::UdpSocket::from_std(socket.into())
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_udp_bind_device(socket: &socket2::Socket, device: &str) -> Result<(), ()> {
+	if let Ok(device) = std::ffi::CString::new(device) {
+		let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
+
+		let result = unsafe {
+			libc::setsockopt(
+				fd,
+				libc::SOL_SOCKET,
+				libc::SO_BINDTODEVICE,
+				device.as_ptr() as *const _,
+				device.to_bytes().len() as libc::socklen_t,
+			)
+		};
+		if result == -1 {
+			return Err(());
+		}
+		Ok(())
+	} else {
+		Err(())
 	}
 }

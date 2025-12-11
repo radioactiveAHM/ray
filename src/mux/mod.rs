@@ -2,7 +2,7 @@ use std::{
 	cell::RefCell,
 	collections::HashMap,
 	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
-	pin::Pin
+	pin::Pin,
 };
 
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
@@ -68,7 +68,6 @@ pub async fn xudp<S>(
 	stream: S,
 	mut buffer: Vec<u8>,
 	resolver: crate::resolver::RS,
-	buf_size: usize,
 	_sockopt: crate::config::SockOpt,
 	peer_ip: IpAddr,
 ) -> tokio::io::Result<()>
@@ -83,23 +82,18 @@ where
 	} else {
 		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
 	};
-	let udp = tokio::net::UdpSocket::bind(SocketAddr::new(ip, 0)).await?;
-	#[cfg(target_os = "linux")]
-	{
-		if _sockopt.bind_to_device {
-			if let Some(interface) = &_sockopt.interface {
-				if crate::tcp::tcp_options::set_udp_bind_device(&udp, &interface).is_err() {
-					log::warn!("Failed to set bind to device");
-				};
-			}
-		}
-	}
+	let udp = crate::udputils::udp_socket(SocketAddr::new(ip, 0), _sockopt).await?;
 	let domain_map: RefCell<HashMap<IpAddr, String>> = RefCell::new(HashMap::new());
+
+	let (r_upbs, w_upbs) = (
+		crate::CONFIG.udp_proxy_buffer_size.0 * 1024,
+		crate::CONFIG.udp_proxy_buffer_size.1 * 1024,
+	);
 
 	let (mut client_r, mut client_w) = tokio::io::split(stream);
 	if let Err(e) = tokio::try_join!(
-		copy_t2u(&udp, &mut client_r, buffer, domain_map.clone(), buf_size, resolver),
-		copy_u2t(&udp, &mut client_w, domain_map.clone())
+		copy_t2u(&udp, &mut client_r, buffer, domain_map.clone(), w_upbs, resolver),
+		copy_u2t(&udp, &mut client_w, domain_map.clone(), r_upbs)
 	) {
 		let _ = client_w.shutdown().await;
 		return Err(e);
@@ -113,6 +107,7 @@ pub async fn copy_u2t<W>(
 	udp: &tokio::net::UdpSocket,
 	w: &mut W,
 	domain_map: RefCell<HashMap<IpAddr, String>>,
+	buf_size: usize,
 ) -> tokio::io::Result<()>
 where
 	W: AsyncWrite + Unpin,
@@ -122,7 +117,7 @@ where
 	//                       H Len   ID   K Opt UDP
 	//                       |___|  |--|  |  |  |
 	let mut head: [u8; 7] = [0, 12, 0, 0, 2, 1, 2];
-	let mut buff = [0; 1024 * 8];
+	let mut buff = vec![0; buf_size];
 	loop {
 		let (packet_len, addr) = udp.recv_from(&mut buff).await?;
 		let port = convert_u16_to_two_u8s_be(addr.port());
@@ -176,7 +171,7 @@ pub async fn copy_t2u<R>(
 where
 	R: AsyncRead + Unpin,
 {
-	let mut b = Vec::with_capacity(buf_size * 1024);
+	let mut b = Vec::with_capacity(buf_size);
 	b.extend_from_slice(&b0);
 
 	handle_xudp_packets(Pin::new(&mut r), udp, b, domain_map, resolver).await
@@ -225,7 +220,7 @@ where
 	};
 	// <--
 
-	let mut buf = [0; 1024 * 8];
+	let mut buf = vec![0; internal_buf.capacity()];
 	let mut wrapper = ReadBuf::new(&mut buf);
 	loop {
 		if internal_buf.len() >= 1024 * 16 {
@@ -233,7 +228,6 @@ where
 		}
 		crate::pipe::read_timeout(&mut r, &mut wrapper, crate::CONFIG.udp_idle_timeout).await?;
 		internal_buf.extend_from_slice(wrapper.filled());
-		wrapper.clear();
 		loop {
 			if internal_buf.len() < 2 {
 				break;
