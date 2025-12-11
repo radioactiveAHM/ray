@@ -30,7 +30,7 @@ async fn parse_target(buff: &[u8], port: u16, resolver: &crate::resolver::RS) ->
 			))
 		}
 		2 => {
-			if buff.len() < buff[22] as usize + 23 {
+			if buff.len() < *buff.get(22).ok_or(VError::Unknown)? as usize + 23 {
 				return Err(VError::Unknown);
 			}
 			if let Ok(s) = core::str::from_utf8(&buff[23..buff[22] as usize + 23]) {

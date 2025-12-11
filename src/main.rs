@@ -400,7 +400,7 @@ where
 				},
 				size = udp.recv(&mut udp_buf[2..]) => {
 					let size = size?;
-					udp_buf[0..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
+					udp_buf[..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
 					client_w_pin.write_all(&udp_buf[..size + 2]).await?;
 					Ok(())
 				},
