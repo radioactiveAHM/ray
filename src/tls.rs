@@ -16,7 +16,9 @@ impl Tc {
 	}
 	pub async fn accept(self) -> Result<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, tokio::io::Error> {
 		self.acceptor.accept(self.stream.0).await.map(|mut tls| {
-			tls.get_mut().1.set_buffer_limit(Some(crate::CONFIG.tls_buffer_limit * 1024));
+			tls.get_mut()
+				.1
+				.set_buffer_limit(Some(crate::CONFIG.tls_buffer_limit * 1024));
 			tls
 		})
 	}

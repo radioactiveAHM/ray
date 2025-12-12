@@ -99,14 +99,16 @@ async fn stream_one(
 		resp.send_reset(h2::Reason::REFUSED_STREAM);
 		return Err(crate::verror::VError::TransporterError.into());
 	}
-	let payload = if let Some(data_res) = req.body_mut().data().await {
-		data_res.map_err(tokio::io::Error::other)?
+
+	let mut payload = Vec::new();
+	stream_recv_timeout(req.body_mut(), &mut payload).await?;
+	if payload.len() < 19 {
+		// minimum is mux header
+		stream_recv_timeout(req.body_mut(), &mut payload).await?;
 	} else {
-		return Err(tokio::io::Error::new(
-			std::io::ErrorKind::ConnectionAborted,
-			"h2 stream read closed",
-		));
-	};
+		// try to read again if exist to complete
+		try_stream_recv(req.body_mut(), &mut payload).await?;
+	}
 
 	let vless = crate::vless::Vless::new(&payload, &resolver).await?;
 	if crate::auth::authenticate(&vless, peer_addr) {
@@ -135,7 +137,37 @@ async fn stream_one(
 	}
 }
 
-//
+// utils
+
+async fn stream_recv_timeout(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
+	let data = tokio::time::timeout(std::time::Duration::from_secs(5), rs.data())
+		.await?
+		.ok_or(tokio::io::Error::new(
+			std::io::ErrorKind::ConnectionAborted,
+			"h2 stream read closed",
+		))?
+		.map_err(tokio::io::Error::other)?;
+
+	vec.extend_from_slice(&data);
+	rs.flow_control()
+		.release_capacity(data.len())
+		.map_err(tokio::io::Error::other)?;
+	Ok(())
+}
+
+async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
+	std::future::poll_fn(|cx| match rs.poll_data(cx) {
+		std::task::Poll::Ready(Some(Ok(data))) => {
+			vec.extend_from_slice(&data);
+			rs.flow_control()
+				.release_capacity(data.len())
+				.map_err(tokio::io::Error::other)?;
+			std::task::Poll::Ready(Ok(()))
+		}
+		_ => std::task::Poll::Ready(Ok(())),
+	})
+	.await
+}
 
 fn http_head_match(req: &http::Request<h2::RecvStream>, http_head: Arc<(Option<String>, String)>) -> bool {
 	if req.uri().path() == http_head.1 {
