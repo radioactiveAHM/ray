@@ -8,8 +8,8 @@
 - [x] HTTP
 - [x] HTTP Upgrade
 - [x] WS (WebSocket)
-- [x] XHTTP H2 stream-one
-- [ ] XHTTP H2 stream-up
+- [x] XHTTP H2 stream-one + stream-up
+- [ ] XHTTP H2 packet-up
 
 ## Vless Request Commands
 
@@ -35,8 +35,8 @@
         "file": "l.log" // set null to log to Stdout
     },
     "tls_buffer_limit": 64,
-    "tcp_proxy_buffer_size": null, // The internal buffer size for the TCP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
-    "udp_proxy_buffer_size": null, // The internal buffer size for the UDP proxy. If set to null, the buffer size defaults to 8KB. Unit is Kb.
+    "tcp_proxy_buffer_size": [8, 8], // The internal buffer size (read, write) for the TCP proxy. Unit is Kb.
+    "udp_proxy_buffer_size": [8, 8], // The internal buffer size (read, write) for the UDP proxy. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds.
     "udp_idle_timeout": 90, // UDP idle timeout in seconds.
     "users": [ // User list
@@ -71,9 +71,9 @@
         "port": 53,
         "trust_negative_responses": true,
         "ip_strategy": "Ipv4thenIpv6", // Options: Ipv4Only, Ipv6Only, Ipv4AndIpv6, Ipv6thenIpv4, Ipv4thenIpv6,
-        "cache_size": 64,
-        "timeout": 5,
-        "num_concurrent_reqs": 2
+        "cache_size": 64, // Cache size is in number of records
+        "timeout": 2, // Specify the timeout for a request.
+        "num_concurrent_reqs": 2 // Number of concurrent requests per query. Where more than one nameserver is configured, this configures the resolver to send queries to a number of servers in parallel. Defaults to 2; 0 or 1 will execute requests serially.
     },
     "tcp_socket_options": {
         "send_buffer_size": null, // The size of the socket send buffer, if set; null means default system size

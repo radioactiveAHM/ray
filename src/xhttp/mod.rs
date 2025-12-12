@@ -1,3 +1,5 @@
+mod su;
+
 use std::{net::SocketAddr, sync::Arc};
 
 use crate::resolver::RS;
@@ -29,6 +31,7 @@ pub async fn xhttp_server(
 ) {
 	let builder = h2_builder(&transport);
 	let http_head: Arc<(Option<String>, String)> = Arc::new((transport.host, transport.path));
+	let su_waiter: su::SuWaiter = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
 	loop {
 		match crate::tls::Tc::new(acceptor.clone(), tcp.accept().await) {
 			Ok(tc) => {
@@ -36,10 +39,12 @@ pub async fn xhttp_server(
 				let builder = builder.clone();
 				let sockopt = sockopt.clone();
 				let http_head = http_head.clone();
+				let su_waiter = su_waiter.clone();
 				tokio::spawn(async move {
 					match tc.accept().await {
 						Ok(tls) => {
-							if let Err(e) = handle_h2_conn(tls, resolver, builder, sockopt, http_head).await {
+							if let Err(e) = handle_h2_conn(tls, resolver, builder, sockopt, http_head, su_waiter).await
+							{
 								log::warn!("{e}");
 							}
 						}
@@ -62,19 +67,61 @@ async fn handle_h2_conn(
 	builder: h2::server::Builder,
 	sockopt: crate::config::SockOpt,
 	http_head: Arc<(Option<String>, String)>,
+	su_waiter: su::SuWaiter,
 ) -> tokio::io::Result<()> {
 	let peer_addr = tls.get_ref().0.peer_addr()?;
-	let mut h2c = builder.handshake(tls).await.map_err(tokio::io::Error::other)?;
+	let mut h2c: h2::server::Connection<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, Bytes> =
+		builder.handshake(tls).await.map_err(tokio::io::Error::other)?;
 	loop {
 		match h2c.accept().await {
 			Some(stream_res) => {
-				let stream = stream_res.map_err(tokio::io::Error::other)?;
+				let mut stream = stream_res.map_err(tokio::io::Error::other)?;
 				let resolver = resolver.clone();
 				let sockopt = sockopt.clone();
 				let http_head = http_head.clone();
+				let su_waiter = su_waiter.clone();
 				tokio::spawn(async move {
-					if let Err(e) = stream_one(stream, resolver, sockopt, http_head, peer_addr).await {
-						log::warn!("{e}")
+					let mut path_parts: Vec<&str> = stream.0.uri().path().split("/").collect();
+					if let Some(last) = path_parts.last()
+						&& last.len() == 36
+						&& let Ok(su_uuid) = uuid::Uuid::parse_str(last)
+					{
+						// stream up
+						path_parts.pop();
+						let path = path_parts.join("/") + "/";
+						if http_head_match(&path, stream.0.headers(), http_head) {
+							log::warn!("http path/host error");
+							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
+							return;
+						}
+
+						let mut su_waiter_locked = su_waiter.lock().await;
+						let stat = su_waiter_locked.remove(&su_uuid);
+						if let Some(waiter) = stat {
+							// send stream
+							let _ = waiter.send(stream).await;
+						} else {
+							let (chan_send, chan_recv) = tokio::sync::mpsc::channel(1);
+							let _ = su_waiter_locked.insert(su_uuid, chan_send);
+							drop(su_waiter_locked);
+							if let Err(e) =
+								su::stream_up(su_uuid, su_waiter, stream, chan_recv, resolver, sockopt, peer_addr).await
+							{
+								log::warn!("{e}")
+							}
+						}
+					} else {
+						// stream one
+						let path = path_parts.join("/");
+						if http_head_match(&path, stream.0.headers(), http_head) {
+							log::warn!("http path/host error");
+							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
+							return;
+						}
+
+						if let Err(e) = stream_one(stream, resolver, sockopt, peer_addr).await {
+							log::warn!("{e}")
+						}
 					}
 				});
 			}
@@ -92,49 +139,48 @@ async fn stream_one(
 	(mut req, mut resp): (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	resolver: RS,
 	sockopt: crate::config::SockOpt,
-	http_head: Arc<(Option<String>, String)>,
 	peer_addr: SocketAddr,
 ) -> tokio::io::Result<()> {
-	if http_head_match(&req, http_head) {
-		resp.send_reset(h2::Reason::REFUSED_STREAM);
-		return Err(crate::verror::VError::TransporterError.into());
-	}
-
-	let mut payload = Vec::new();
-	stream_recv_timeout(req.body_mut(), &mut payload).await?;
-	if payload.len() < 19 {
-		// minimum is mux header
+	let res = {
+		let mut payload = Vec::new();
 		stream_recv_timeout(req.body_mut(), &mut payload).await?;
-	} else {
-		// try to read again if exist to complete
-		try_stream_recv(req.body_mut(), &mut payload).await?;
-	}
-
-	let vless = crate::vless::Vless::new(&payload, &resolver).await?;
-	if crate::auth::authenticate(&vless, peer_addr) {
-		resp.send_reset(h2::Reason::REFUSED_STREAM);
-		return Err(crate::verror::VError::AuthenticationFailed.into());
-	}
-
-	let http_resp = http::Response::builder()
-		.header("X-Accel-Buffering", "no")
-		.header("Cache-Control", "no-store")
-		.header("Content-Type", "text/event-stream")
-		.version(http::Version::HTTP_2)
-		.status(http::StatusCode::OK)
-		.body(())
-		.unwrap();
-	let w = resp.send_response(http_resp, false).map_err(tokio::io::Error::other)?;
-	let mut h2t = H2t {
-		stream: (req.into_body(), w),
-	};
-	match vless.rt {
-		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, sockopt).await,
-		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, sockopt).await,
-		crate::vless::RequestCommand::MUX => {
-			crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, sockopt, peer_addr.ip()).await
+		if payload.len() < 19 {
+			// minimum is mux header
+			stream_recv_timeout(req.body_mut(), &mut payload).await?;
+		} else {
+			// try to read again if exist to complete
+			try_stream_recv(req.body_mut(), &mut payload).await?;
 		}
-	}
+
+		let vless = crate::vless::Vless::new(&payload, &resolver).await?;
+		if crate::auth::authenticate(&vless, peer_addr) {
+			resp.send_reset(h2::Reason::REFUSED_STREAM);
+			return Err(crate::verror::VError::AuthenticationFailed.into());
+		}
+
+		let http_resp = http::Response::builder()
+			.header("X-Accel-Buffering", "no")
+			.header("Cache-Control", "no-store")
+			.header("Content-Type", "text/event-stream")
+			.version(http::Version::HTTP_2)
+			.status(http::StatusCode::OK)
+			.body(())
+			.unwrap();
+		let w = resp.send_response(http_resp, false).map_err(tokio::io::Error::other)?;
+		let mut h2t = H2t {
+			stream: (req.into_body(), w),
+		};
+
+		match vless.rt {
+			crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, sockopt).await,
+			crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, sockopt).await,
+			crate::vless::RequestCommand::MUX => {
+				crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, sockopt, peer_addr.ip()).await
+			}
+		}
+	};
+	resp.send_reset(h2::Reason::CANCEL);
+	res
 }
 
 // utils
@@ -151,8 +197,7 @@ async fn stream_recv_timeout(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> toki
 	vec.extend_from_slice(&data);
 	rs.flow_control()
 		.release_capacity(data.len())
-		.map_err(tokio::io::Error::other)?;
-	Ok(())
+		.map_err(tokio::io::Error::other)
 }
 
 async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
@@ -169,14 +214,18 @@ async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::i
 	.await
 }
 
-fn http_head_match(req: &http::Request<h2::RecvStream>, http_head: Arc<(Option<String>, String)>) -> bool {
-	if req.uri().path() == http_head.1 {
+fn http_head_match(mut path: &str, headers: &http::HeaderMap, http_head: Arc<(Option<String>, String)>) -> bool {
+	if path.is_empty() {
+		path = "/";
+	}
+
+	if http_head.1 == path {
 		if let Some(host) = &http_head.0 {
-			if let Some(value) = req.headers().get("host")
+			if let Some(value) = headers.get("host")
 				&& let Ok(req_host) = value.to_str()
 			{
 				host != req_host
-			} else if let Some(value) = req.headers().get("referer")
+			} else if let Some(value) = headers.get("referer")
 				&& let Ok(req_referer) = value.to_str()
 			{
 				!req_referer.contains(host)
@@ -194,12 +243,6 @@ fn http_head_match(req: &http::Request<h2::RecvStream>, http_head: Arc<(Option<S
 // utils
 struct H2t {
 	stream: (h2::RecvStream, h2::SendStream<bytes::Bytes>),
-}
-
-impl Drop for H2t {
-	fn drop(&mut self) {
-		self.stream.1.send_reset(h2::Reason::CANCEL);
-	}
 }
 
 impl AsyncRead for H2t {

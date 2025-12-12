@@ -9,12 +9,12 @@
 		"thread_keep_alive": null
 	},
 	"log": {
-		"level": "warn",
+		"level": "error",
 		"file": "l.log"
 	},
 	"tls_buffer_limit": 64,
-	"tcp_proxy_buffer_size": null,
-	"udp_proxy_buffer_size": null,
+	"tcp_proxy_buffer_size": [128, 128],
+	"udp_proxy_buffer_size": [8, 128],
 	"tcp_idle_timeout": 150,
 	"udp_idle_timeout": 90,
 	"users": [
@@ -44,7 +44,12 @@
 	],
 	"resolver": {
 		"resolver": null,
-		"ips": ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
+		"ips": [
+			"1.1.1.1",
+			"1.0.0.1",
+			"2606:4700:4700::1111",
+			"2606:4700:4700::1001"
+		],
 		"port": 53,
 		"trust_negative_responses": true,
 		"ip_strategy": "Ipv4thenIpv6",
