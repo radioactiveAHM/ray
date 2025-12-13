@@ -84,13 +84,7 @@
         "timeout": 2, // Specify the timeout for a request.
         "num_concurrent_reqs": 2 // Number of concurrent requests per query. Where more than one nameserver is configured, this configures the resolver to send queries to a number of servers in parallel. Defaults to 2; 0 or 1 will execute requests serially.
     },
-    "tcp_socket_options": {
-        "send_buffer_size": null, // The size of the socket send buffer, if set; null means default system size
-        "recv_buffer_size": null, // The size of the socket receive buffer, if set; null means default system size
-        "nodelay": null, // Whether to disable Nagle’s algorithm; false means packets may be buffered for efficiency
-        "keepalive": null, // Whether to enable keepalive packets to maintain connection activity
-    },
-    "blacklist": null // Domain blacklist
+    "rules": null
 }
 ```
 
@@ -156,9 +150,9 @@ XHTTP
 ## Rules Configuration
 
 ```json
-    "blacklist": [
-        { // Black list object
-            "domains": [ // List of domains
+    "rules": [
+        {
+            "domains": [
                 "google.com", // This will block any domain containing google.com for example mail.google.com.
                 "googleadservices.com"
             ],
