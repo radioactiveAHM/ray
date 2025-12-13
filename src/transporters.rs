@@ -144,7 +144,7 @@ pub async fn websocket_transport<S>(
 	mut ws: tokio_websockets::WebSocketStream<S>,
 	resolver: crate::resolver::RS,
 	peer_addr: std::net::SocketAddr,
-	sockopt: crate::config::SockOpt,
+	outbound: &'static str,
 ) -> tokio::io::Result<()>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
@@ -163,10 +163,10 @@ where
 
 	let mut wst = Wst { ws, closed: false };
 	if let Err(e) = match vless.rt {
-		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload, &mut wst, sockopt).await,
-		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload, &mut wst, sockopt).await,
+		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload, &mut wst, outbound).await,
+		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload, &mut wst, outbound).await,
 		crate::vless::RequestCommand::MUX => {
-			crate::mux::xudp(&mut wst, payload, resolver, sockopt, peer_addr.ip()).await
+			crate::mux::xudp(&mut wst, payload, resolver, outbound, peer_addr.ip()).await
 		}
 	} {
 		log::warn!("{peer_addr}: {e}");

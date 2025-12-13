@@ -50,21 +50,30 @@
         {
             "listen": "0.0.0.0:80", // Server listening address and port. [::] works for both ipv4 and ipv6 in linux (dual stack).
             "transporter": "TCP", // Transport protocol
+            "outbound": "direct", // default outbound tag
             "tls": { // TLS Configuration
                 "enable": false, // Enable tls
                 "max_fragment_size": null, // The maximum size of plaintext input to be emitted in a single TLS record. A value of null is equivalent to the TLS maximum of 16 kB. Unit is bytes.
                 "alpn": ["h2", "http/1.1"],
                 "certificate": "cert.pem", // Certificate Path
                 "key": "key.pem" // Key Path
-            },
-            "sockopt": {
-                "interface": null, // Bind interface/Adaptor
-                "bind_to_device": false,
-                "mss": null,
-                "congestion": null
             }
         }
     ],
+    "outbounds": { // Map object of outbounds
+        "direct": {
+            "opt": {
+                "interface": null,
+                "bind_to_device": false,
+                "mss": null,
+                "congestion": null,
+                "send_buffer_size": null,
+                "recv_buffer_size": null,
+                "nodelay": null,
+                "keepalive": null
+            }
+        }
+    },
     "resolver": { // Built-in domain resolver supporting multiple protocols: udp, https, h3, tls, and quic
         "resolver": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google", "quic://dns.google"
         "ips": ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
@@ -133,33 +142,40 @@ XHTTP
 
 ```json
     "transporter": {
-    "XHTTP" : {
-        "path": "/",
-        "host": "example.com", // If set null any host will be accepted.
-        "max_frame_size": 8, // must be less or equal to tcp_proxy_buffer_size. Unit is Kb.
-        "max_send_buffer_size": 1024, // Sets the maximum send buffer size per stream. Unit is Kb.
-        "initial_connection_window_size": 16384, // Indicates the initial window size (in octets) for connection-level flow control for received data. Unit is Kb.
-        "initial_window_size": 1024 // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.
-    }
+        "XHTTP" : {
+            "path": "/",
+            "host": "example.com", // If set null any host will be accepted.
+            "max_frame_size": 8, // must be less or equal to tcp_proxy_buffer_size. Unit is Kb.
+            "max_send_buffer_size": 1024, // Sets the maximum send buffer size per stream. Unit is Kb.
+            "initial_connection_window_size": 16384, // Indicates the initial window size (in octets) for connection-level flow control for received data. Unit is Kb.
+            "initial_window_size": 1024 // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.
+        }
     }
 ```
 
-## Blacklist Configuration
+## Rules Configuration
 
 ```json
     "blacklist": [
         { // Black list object
-            "name": "google",
             "domains": [ // List of domains
                 "google.com", // This will block any domain containing google.com for example mail.google.com.
                 "googleadservices.com"
-            ]
+            ],
+            "ips": [
+                "192.168.0.1",
+                "[2606:4700:4700::1111]"
+            ],
+            "operation": "Reject"
         },
         {
-            "name": "xyz blacklist",
-            "domains": [
-                ".xyz" // This will block any domain xyz domain.
-            ]
+            "domains": null,
+            "ips": [
+                "8.8.8.8"
+            ],
+            "operation": {
+                "Outbound": "outbound-tag"
+            }
         },
     ]
 ```

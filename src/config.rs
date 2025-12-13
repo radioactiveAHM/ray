@@ -1,17 +1,33 @@
-use std::net::SocketAddr;
-
-#[derive(serde::Deserialize)]
-pub struct BlackList {
-	pub name: String,
-	pub domains: Vec<String>,
-}
-
-#[derive(serde::Deserialize, Clone, Copy)]
-pub struct TcpSocketOptions {
+#[derive(serde::Deserialize, Clone, Default)]
+#[allow(dead_code)]
+pub struct SockOpt {
+	pub interface: Option<String>,
+	pub bind_to_device: bool,
+	pub mss: Option<i32>,
+	pub congestion: Option<String>,
 	pub send_buffer_size: Option<u32>,
 	pub recv_buffer_size: Option<u32>,
 	pub nodelay: Option<bool>,
 	pub keepalive: Option<bool>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct Outbound {
+	pub opt: SockOpt,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub enum OP {
+	Allow,
+	Reject,
+	Outbound(String),
+}
+
+#[derive(serde::Deserialize)]
+pub struct Rule {
+	pub domains: Option<Vec<String>>,
+	pub ips: Option<Vec<std::net::IpAddr>>,
+	pub operation: OP,
 }
 
 #[derive(serde::Deserialize)]
@@ -119,21 +135,12 @@ pub struct Resolver {
 	pub num_concurrent_reqs: usize,
 }
 
-#[derive(serde::Deserialize, Clone, Default)]
-#[allow(dead_code)]
-pub struct SockOpt {
-	pub interface: Option<String>,
-	pub bind_to_device: bool,
-	pub mss: Option<i32>,
-	pub congestion: Option<String>,
-}
-
 #[derive(serde::Deserialize)]
 pub struct Inbound {
-	pub listen: SocketAddr,
+	pub listen: std::net::SocketAddr,
 	pub transporter: Transporter,
+	pub outbound: String,
 	pub tls: Tls,
-	pub sockopt: SockOpt,
 }
 
 #[derive(serde::Deserialize)]
@@ -193,9 +200,9 @@ pub struct Config {
 	pub udp_idle_timeout: u64,
 	pub users: Vec<User>,
 	pub inbounds: Vec<Inbound>,
+	pub outbounds: std::collections::HashMap<String, Outbound>,
 	pub resolver: Resolver,
-	pub tcp_socket_options: TcpSocketOptions,
-	pub blacklist: Option<Vec<BlackList>>,
+	pub rules: Option<Vec<Rule>>,
 }
 
 pub fn load_config() -> Config {

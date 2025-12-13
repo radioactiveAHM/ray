@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio::net::{TcpSocket, TcpStream};
 
 #[inline(always)]
-pub fn tcpsocket(a: SocketAddr, _sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpSocket> {
+pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpSocket> {
 	let socket: TcpSocket = if a.is_ipv4() {
 		tokio::net::TcpSocket::new_v4()?
 	} else {
@@ -12,18 +12,18 @@ pub fn tcpsocket(a: SocketAddr, _sockopt: &crate::config::SockOpt) -> tokio::io:
 
 	#[cfg(target_os = "linux")]
 	{
-		if let Some(mss) = _sockopt.mss {
+		if let Some(mss) = sockopt.mss {
 			if tcp_options::set_tcp_mss(&socket, mss).is_err() {
 				log::warn!("Failed to set tcp mss");
 			};
 		}
-		if let Some(congestion) = &_sockopt.congestion {
+		if let Some(congestion) = &sockopt.congestion {
 			if tcp_options::set_tcp_congestion(&socket, congestion).is_err() {
 				log::warn!("Failed to set tcp congestion");
 			};
 		}
-		if _sockopt.bind_to_device {
-			if let Some(interface) = &_sockopt.interface {
+		if sockopt.bind_to_device {
+			if let Some(interface) = &sockopt.interface {
 				if tcp_options::set_tcp_bind_device(&socket, &interface).is_err() {
 					log::warn!("Failed to set bind to device");
 				};
@@ -31,18 +31,17 @@ pub fn tcpsocket(a: SocketAddr, _sockopt: &crate::config::SockOpt) -> tokio::io:
 		}
 	}
 
-	let options = crate::CONFIG.tcp_socket_options;
-	if let Some(sbs) = options.send_buffer_size {
+	if let Some(sbs) = sockopt.send_buffer_size {
 		socket.set_send_buffer_size(sbs)?;
 	}
-	if let Some(rbs) = options.recv_buffer_size {
+	if let Some(rbs) = sockopt.recv_buffer_size {
 		socket.set_recv_buffer_size(rbs)?;
 	}
-	if let Some(nodelay) = options.nodelay {
+	if let Some(nodelay) = sockopt.nodelay {
 		socket.set_nodelay(nodelay)?;
 	}
-	if let Some(keepalive) = options.keepalive {
-		socket.set_nodelay(keepalive)?;
+	if let Some(keepalive) = sockopt.keepalive {
+		socket.set_keepalive(keepalive)?;
 	}
 
 	socket.bind(a)?;

@@ -12,11 +12,11 @@ use tokio_rustls::{
 use crate::utils::convert_u16_to_two_u8s_be;
 
 mod auth;
-mod blacklist;
 mod config;
 mod mux;
 mod pipe;
 mod resolver;
+mod rules;
 mod tcp;
 mod tls;
 mod transporters;
@@ -130,7 +130,7 @@ async fn app() {
 					if !inbound.tls.enable {
 						panic!("enable tls for xhttp")
 					}
-					return xhttp::xhttp_server(resolver, tcp, acceptor, xhttp, inbound.sockopt.clone()).await;
+					return xhttp::xhttp_server(resolver, tcp, acceptor, xhttp, &inbound.outbound).await;
 				}
 
 				loop {
@@ -139,8 +139,7 @@ async fn app() {
 							let resolver = resolver.clone();
 							tokio::spawn(async move {
 								if let Err(e) =
-									tls_handler(tc, resolver, inbound.transporter.clone(), inbound.sockopt.clone())
-										.await
+									tls_handler(tc, resolver, inbound.transporter.clone(), &inbound.outbound).await
 								{
 									log::warn!("TLS: {e}")
 								}
@@ -163,7 +162,7 @@ async fn app() {
 									peer_addr,
 									resolver,
 									inbound.transporter.clone(),
-									inbound.sockopt.clone(),
+									&inbound.outbound,
 								)
 								.await
 							{
@@ -184,12 +183,12 @@ async fn tls_handler(
 	tc: tls::Tc,
 	resolver: resolver::RS,
 	transport: config::Transporter,
-	sockopt: config::SockOpt,
+	outbound: &'static str,
 ) -> tokio::io::Result<()> {
 	let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
 	let stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream> = tc.accept().await?;
 
-	stream_handler(stream, peer_addr, resolver, transport, sockopt).await
+	stream_handler(stream, peer_addr, resolver, transport, outbound).await
 }
 
 async fn stream_handler<S>(
@@ -197,7 +196,7 @@ async fn stream_handler<S>(
 	peer_addr: SocketAddr,
 	resolver: resolver::RS,
 	transport: config::Transporter,
-	sockopt: config::SockOpt,
+	outbound: &'static str,
 ) -> tokio::io::Result<()>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
@@ -247,7 +246,7 @@ where
 						return Err(verror::VError::TransporterError.into());
 					}
 				}
-				return transporters::websocket_transport(ws, resolver, peer_addr, sockopt).await;
+				return transporters::websocket_transport(ws, resolver, peer_addr, outbound).await;
 			} else {
 				return Err(verror::VError::TransporterError.into());
 			}
@@ -265,9 +264,9 @@ where
 	let payload = buff[..size].to_vec();
 	drop(buff);
 	if let Err(e) = match vless.rt {
-		vless::RequestCommand::TCP => handle_tcp(vless, payload, &mut stream, sockopt).await,
-		vless::RequestCommand::UDP => handle_udp(vless, payload, &mut stream, sockopt).await,
-		vless::RequestCommand::MUX => mux::xudp(&mut stream, payload, resolver, sockopt, peer_addr.ip()).await,
+		vless::RequestCommand::TCP => handle_tcp(vless, payload, &mut stream, outbound).await,
+		vless::RequestCommand::UDP => handle_udp(vless, payload, &mut stream, outbound).await,
+		vless::RequestCommand::MUX => mux::xudp(&mut stream, payload, resolver, outbound, peer_addr.ip()).await,
 	} {
 		log::warn!("{peer_addr}: {e}");
 	} else {
@@ -281,16 +280,17 @@ async fn handle_tcp<S>(
 	vless: vless::Vless,
 	payload: Vec<u8>,
 	mut stream: S,
-	sockopt: config::SockOpt,
+	outbound: &'static str,
 ) -> tokio::io::Result<()>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
-	let (target_addr, body) = vless.target.as_ref().unwrap();
-	let mut target = tcp::stream(*target_addr, &sockopt).await?;
+	let (target_addr, domain, body) = vless.target.unwrap();
+	let sockopt = rules::rules(&target_addr.ip(), domain, outbound)?;
+	let mut target = tcp::stream(target_addr, sockopt).await?;
 
-	if !&payload[*body..].is_empty() {
-		target.write_all(&payload[*body..]).await?;
+	if !&payload[body..].is_empty() {
+		target.write_all(&payload[body..]).await?;
 	}
 	drop(payload);
 
@@ -347,24 +347,25 @@ async fn handle_udp<S>(
 	vless: vless::Vless,
 	payload: Vec<u8>,
 	stream: S,
-	_sockopt: config::SockOpt,
+	outbound: &'static str,
 ) -> tokio::io::Result<()>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
-	let (target, body) = vless.target.as_ref().unwrap();
+	let (target, domain, body) = vless.target.unwrap();
 	let ip = if target.is_ipv4() {
 		IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 	} else {
 		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
 	};
-	let udp = udputils::udp_socket(SocketAddr::new(ip, 0), _sockopt).await?;
+	let sockopt = rules::rules(&target.ip(), domain, outbound)?;
+	let udp = udputils::udp_socket(SocketAddr::new(ip, 0), sockopt).await?;
 	udp.connect(target).await?;
 
 	// first packet might not be complete
 	// todo: caused panic: range start index 28 out of range for slice of length 27
-	if !&payload[*body..].is_empty() {
-		udp.send(&payload[*body + 2..]).await?;
+	if !&payload[body..].is_empty() {
+		udp.send(&payload[body + 2..]).await?;
 	}
 	drop(payload);
 

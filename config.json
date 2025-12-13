@@ -27,21 +27,30 @@
 		{
 			"listen": "0.0.0.0:80",
 			"transporter": "TCP",
+			"outbound": "direct",
 			"tls": {
 				"enable": false,
 				"max_fragment_size": null,
 				"alpn": ["h2", "http/1.1"],
 				"certificate": "cert.pem",
 				"key": "key.pem"
-			},
-			"sockopt": {
-				"interface": null,
-				"bind_to_device": false,
-				"mss": null,
-				"congestion": null
 			}
 		}
 	],
+	"outbounds": {
+		"direct": {
+			"opt": {
+				"interface": null,
+				"bind_to_device": false,
+				"mss": null,
+				"congestion": null,
+				"send_buffer_size": null,
+				"recv_buffer_size": null,
+				"nodelay": null,
+				"keepalive": null
+			}
+		}
+	},
 	"resolver": {
 		"resolver": null,
 		"ips": [
@@ -57,11 +66,5 @@
 		"timeout": 5,
 		"num_concurrent_reqs": 12
 	},
-	"tcp_socket_options": {
-		"send_buffer_size": null,
-		"recv_buffer_size": null,
-		"nodelay": null,
-		"keepalive": null
-	},
-	"blacklist": null
+	"rules": null
 }

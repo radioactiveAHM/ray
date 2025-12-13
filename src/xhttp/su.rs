@@ -13,7 +13,7 @@ pub async fn stream_up(
 	stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	mut chan_recv: tokio::sync::mpsc::Receiver<(http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>)>,
 	resolver: super::RS,
-	sockopt: crate::config::SockOpt,
+	outbound: &'static str,
 	peer_addr: std::net::SocketAddr,
 ) -> tokio::io::Result<()> {
 	let stream2 = match tokio::time::timeout(std::time::Duration::from_secs(5), chan_recv.recv()).await {
@@ -48,8 +48,6 @@ pub async fn stream_up(
 
 		let vless = crate::vless::Vless::new(&payload, &resolver).await?;
 		if crate::auth::authenticate(&vless, peer_addr) {
-			r_stream.1.send_reset(h2::Reason::REFUSED_STREAM);
-			w_stream.1.send_reset(h2::Reason::REFUSED_STREAM);
 			return Err(crate::verror::VError::AuthenticationFailed.into());
 		}
 
@@ -71,10 +69,10 @@ pub async fn stream_up(
 		};
 
 		match vless.rt {
-			crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, sockopt).await,
-			crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, sockopt).await,
+			crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, outbound).await,
+			crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, outbound).await,
 			crate::vless::RequestCommand::MUX => {
-				crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, sockopt, peer_addr.ip()).await
+				crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, outbound, peer_addr.ip()).await
 			}
 		}
 	};

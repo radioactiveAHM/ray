@@ -3,6 +3,7 @@ use std::fmt::Display;
 #[derive(Debug)]
 pub enum VError {
 	Unknown,
+	Reject,
 	UTF8Err,
 	TargetErr,
 	UnknownSocket,
@@ -17,7 +18,6 @@ pub enum VError {
 	BufferOverflow,
 	UdpDeadLoop,
 	MailFormedUdpPacket,
-	DomainInBlacklist,
 	WsClosed,
 }
 impl Display for VError {
@@ -25,6 +25,7 @@ impl Display for VError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			VError::Unknown => write!(f, "Unknown"),
+			VError::Reject => write!(f, "ip/domain rejected"),
 			VError::UTF8Err => write!(f, "UTF8Err"),
 			VError::TargetErr => write!(f, "TargetErr"),
 			VError::UnknownSocket => write!(f, "UnknownSocket"),
@@ -39,7 +40,6 @@ impl Display for VError {
 			VError::NoHost => write!(f, "NoHost"),
 			VError::ResolveDnsFailed(e) => write!(f, "ResolveDnsFailed: {e}"),
 			VError::BufferOverflow => write!(f, "BufferOverflow"),
-			VError::DomainInBlacklist => write!(f, "Domain In Blacklist"),
 			VError::WsClosed => write!(f, "WS Close Frame Received"),
 		}
 	}

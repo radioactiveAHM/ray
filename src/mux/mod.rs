@@ -30,10 +30,6 @@ async fn parse_target(
 		))),
 		2 => {
 			if let Ok(s) = core::str::from_utf8(&buff[9..buff[8] as usize + 9]) {
-				if let Some(bl) = &crate::CONFIG.blacklist {
-					// if there is a blacklist
-					crate::blacklist::containing(bl, s)?;
-				}
 				match crate::resolver::resolve(resolver, s, port).await {
 					Ok(ip) => {
 						let _ = domain_map.borrow_mut().insert(ip.ip(), s.to_string());
@@ -68,7 +64,7 @@ pub async fn xudp<S>(
 	stream: S,
 	mut buffer: Vec<u8>,
 	resolver: crate::resolver::RS,
-	_sockopt: crate::config::SockOpt,
+	outbound: &'static str,
 	peer_ip: IpAddr,
 ) -> tokio::io::Result<()>
 where
@@ -82,7 +78,8 @@ where
 	} else {
 		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
 	};
-	let udp = crate::udputils::udp_socket(SocketAddr::new(ip, 0), _sockopt).await?;
+	let opt = crate::rules::get_opt(outbound);
+	let udp = crate::udputils::udp_socket(SocketAddr::new(ip, 0), opt).await?;
 	let domain_map: RefCell<HashMap<IpAddr, String>> = RefCell::new(HashMap::new());
 
 	let (r_upbs, w_upbs) = (

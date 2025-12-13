@@ -27,7 +27,7 @@ pub async fn xhttp_server(
 	tcp: tokio::net::TcpListener,
 	acceptor: tokio_rustls::TlsAcceptor,
 	transport: crate::config::Xhttp,
-	sockopt: crate::config::SockOpt,
+	outbound: &'static str,
 ) {
 	let builder = h2_builder(&transport);
 	let http_head: Arc<(Option<String>, String)> = Arc::new((transport.host, transport.path));
@@ -37,13 +37,12 @@ pub async fn xhttp_server(
 			Ok(tc) => {
 				let resolver = resolver.clone();
 				let builder = builder.clone();
-				let sockopt = sockopt.clone();
 				let http_head = http_head.clone();
 				let su_waiter = su_waiter.clone();
 				tokio::spawn(async move {
 					match tc.accept().await {
 						Ok(tls) => {
-							if let Err(e) = handle_h2_conn(tls, resolver, builder, sockopt, http_head, su_waiter).await
+							if let Err(e) = handle_h2_conn(tls, resolver, builder, outbound, http_head, su_waiter).await
 							{
 								log::warn!("{e}");
 							}
@@ -65,7 +64,7 @@ async fn handle_h2_conn(
 	tls: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
 	resolver: RS,
 	builder: h2::server::Builder,
-	sockopt: crate::config::SockOpt,
+	outbound: &'static str,
 	http_head: Arc<(Option<String>, String)>,
 	su_waiter: su::SuWaiter,
 ) -> tokio::io::Result<()> {
@@ -77,7 +76,6 @@ async fn handle_h2_conn(
 			Some(stream_res) => {
 				let mut stream = stream_res.map_err(tokio::io::Error::other)?;
 				let resolver = resolver.clone();
-				let sockopt = sockopt.clone();
 				let http_head = http_head.clone();
 				let su_waiter = su_waiter.clone();
 				tokio::spawn(async move {
@@ -105,7 +103,8 @@ async fn handle_h2_conn(
 							let _ = su_waiter_locked.insert(su_uuid, chan_send);
 							drop(su_waiter_locked);
 							if let Err(e) =
-								su::stream_up(su_uuid, su_waiter, stream, chan_recv, resolver, sockopt, peer_addr).await
+								su::stream_up(su_uuid, su_waiter, stream, chan_recv, resolver, outbound, peer_addr)
+									.await
 							{
 								log::warn!("{e}")
 							}
@@ -119,7 +118,7 @@ async fn handle_h2_conn(
 							return;
 						}
 
-						if let Err(e) = stream_one(stream, resolver, sockopt, peer_addr).await {
+						if let Err(e) = stream_one(stream, resolver, outbound, peer_addr).await {
 							log::warn!("{e}")
 						}
 					}
@@ -138,7 +137,7 @@ async fn handle_h2_conn(
 async fn stream_one(
 	(mut req, mut resp): (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	resolver: RS,
-	sockopt: crate::config::SockOpt,
+	outbound: &'static str,
 	peer_addr: SocketAddr,
 ) -> tokio::io::Result<()> {
 	let res = {
@@ -154,7 +153,6 @@ async fn stream_one(
 
 		let vless = crate::vless::Vless::new(&payload, &resolver).await?;
 		if crate::auth::authenticate(&vless, peer_addr) {
-			resp.send_reset(h2::Reason::REFUSED_STREAM);
 			return Err(crate::verror::VError::AuthenticationFailed.into());
 		}
 
@@ -172,10 +170,10 @@ async fn stream_one(
 		};
 
 		match vless.rt {
-			crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, sockopt).await,
-			crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, sockopt).await,
+			crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, outbound).await,
+			crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, outbound).await,
 			crate::vless::RequestCommand::MUX => {
-				crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, sockopt, peer_addr.ip()).await
+				crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, outbound, peer_addr.ip()).await
 			}
 		}
 	};

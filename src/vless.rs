@@ -15,7 +15,14 @@ const fn parse_socket(s: u8) -> Result<RequestCommand, VError> {
 		Err(VError::UnknownSocket)
 	}
 }
-async fn parse_target(buff: &[u8], port: u16, resolver: &crate::resolver::RS) -> Result<(SocketAddr, usize), VError> {
+pub async fn parse_target(
+	buff: &[u8],
+	resolver: &crate::resolver::RS,
+) -> Result<(SocketAddr, Option<String>, usize), VError> {
+	let port = convert_two_u8s_to_u16_be([
+		*buff.get(19).ok_or(VError::Unknown)?,
+		*buff.get(20).ok_or(VError::Unknown)?,
+	]);
 	match buff.get(21).ok_or(VError::Unknown)? {
 		1 => {
 			if buff.len() < 26 {
@@ -26,6 +33,7 @@ async fn parse_target(buff: &[u8], port: u16, resolver: &crate::resolver::RS) ->
 					Ipv4Addr::new(buff[22], buff[23], buff[24], buff[25]),
 					port,
 				)),
+				None,
 				26,
 			))
 		}
@@ -34,12 +42,8 @@ async fn parse_target(buff: &[u8], port: u16, resolver: &crate::resolver::RS) ->
 				return Err(VError::Unknown);
 			}
 			if let Ok(s) = core::str::from_utf8(&buff[23..buff[22] as usize + 23]) {
-				if let Some(bl) = &crate::CONFIG.blacklist {
-					// if there is a blacklist
-					crate::blacklist::containing(bl, s)?;
-				}
 				match crate::resolver::resolve(resolver, s, port).await {
-					Ok(ip) => Ok((ip, 23 + buff[22] as usize)),
+					Ok(ip) => Ok((ip, Some(s.to_string()), 23 + buff[22] as usize)),
 					Err(e) => Err(e),
 				}
 			} else {
@@ -66,6 +70,7 @@ async fn parse_target(buff: &[u8], port: u16, resolver: &crate::resolver::RS) ->
 					0,
 					0,
 				)),
+				None,
 				38,
 			))
 		}
@@ -93,7 +98,7 @@ impl Display for RequestCommand {
 pub struct Vless {
 	pub uuid: [u8; 16],
 	pub rt: RequestCommand,
-	pub target: Option<(SocketAddr, usize)>,
+	pub target: Option<(SocketAddr, Option<String>, usize)>,
 }
 
 impl Vless {
@@ -118,14 +123,10 @@ impl Vless {
 			return Ok(v);
 		}
 
-		let port = convert_two_u8s_to_u16_be([
-			*buff.get(19).ok_or(VError::Unknown)?,
-			*buff.get(20).ok_or(VError::Unknown)?,
-		]);
 		let mut v = Self {
 			uuid: [0; 16],
 			rt: parse_socket(buff[18])?,
-			target: Some(parse_target(buff, port, resolver).await?),
+			target: Some(parse_target(buff, resolver).await?),
 		};
 
 		v.uuid.copy_from_slice(&buff[1..17]);
