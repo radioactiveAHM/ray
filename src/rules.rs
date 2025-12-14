@@ -1,4 +1,4 @@
-pub fn get_opt(tag: &str) -> &'static crate::config::SockOpt {
+pub fn get_opt(tag: &str) -> &'static crate::config::Opt {
 	if let Some(o) = crate::CONFIG.outbounds.get(tag) {
 		&o.opt
 	} else {
@@ -11,7 +11,7 @@ pub fn rules(
 	ip: &std::net::IpAddr,
 	target_domain: Option<String>,
 	default_outbound_tag: &str,
-) -> tokio::io::Result<&'static crate::config::SockOpt> {
+) -> tokio::io::Result<&'static crate::config::Opt> {
 	let mut op = crate::config::OP::Allow;
 	if let Some(rules) = &crate::CONFIG.rules {
 		for rule in rules {

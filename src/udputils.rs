@@ -85,7 +85,7 @@ impl AsyncWrite for UdpWriter<'_> {
 #[inline(always)]
 pub async fn udp_socket(
 	serve_addrs: std::net::SocketAddr,
-	_sockopt: &crate::config::SockOpt,
+	_sockopt: &crate::config::Opt,
 ) -> tokio::io::Result<tokio::net::UdpSocket> {
 	let ipversion = if serve_addrs.is_ipv4() {
 		socket2::Domain::IPV4

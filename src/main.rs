@@ -286,8 +286,8 @@ where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
 	let (target_addr, domain, body) = vless.target.unwrap();
-	let sockopt = rules::rules(&target_addr.ip(), domain, outbound)?;
-	let mut target = tcp::stream(target_addr, sockopt).await?;
+	let opt = rules::rules(&target_addr.ip(), domain, outbound)?;
+	let mut target = tcp::stream(target_addr, opt).await?;
 
 	if !&payload[body..].is_empty() {
 		target.write_all(&payload[body..]).await?;
@@ -315,17 +315,30 @@ where
 
 	loop {
 		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.tcp_idle_timeout), async {
-			tokio::select! {
-				read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
-					read?;
-					target_w_pin.write_all(client_buf_rb.filled()).await?;
-					Ok(())
-				},
-				read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
-					read?;
-					client_w_pin.write_all(target_buf_rb.filled()).await?;
-					Ok(())
-				},
+			if opt.tcp_read_buffered {
+				tokio::select! {
+					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
+						read?;
+						target_w_pin.write_all(client_buf_rb.filled()).await
+					},
+					read = pipe::Fill(&mut target_r_pin, &mut target_buf_rb) => {
+						if !target_buf_rb.filled().is_empty(){
+							client_w_pin.write_all(target_buf_rb.filled()).await?;
+						}
+						read
+					},
+				}
+			} else {
+				tokio::select! {
+					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
+						read?;
+						target_w_pin.write_all(client_buf_rb.filled()).await
+					},
+					read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
+						read?;
+						client_w_pin.write_all(target_buf_rb.filled()).await
+					},
+				}
 			}
 		})
 		.await
@@ -358,8 +371,8 @@ where
 	} else {
 		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
 	};
-	let sockopt = rules::rules(&target.ip(), domain, outbound)?;
-	let udp = udputils::udp_socket(SocketAddr::new(ip, 0), sockopt).await?;
+	let opt = rules::rules(&target.ip(), domain, outbound)?;
+	let udp = udputils::udp_socket(SocketAddr::new(ip, 0), opt).await?;
 	udp.connect(target).await?;
 
 	// first packet might not be complete
@@ -402,8 +415,7 @@ where
 				size = udp.recv(&mut udp_buf[2..]) => {
 					let size = size?;
 					udp_buf[..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
-					client_w_pin.write_all(&udp_buf[..size + 2]).await?;
-					Ok(())
+					client_w_pin.write_all(&udp_buf[..size + 2]).await
 				},
 			}
 		})

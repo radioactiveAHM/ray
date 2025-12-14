@@ -1,6 +1,7 @@
 #[derive(serde::Deserialize, Clone, Default)]
 #[allow(dead_code)]
-pub struct SockOpt {
+pub struct Opt {
+	pub tcp_read_buffered: bool,
 	pub interface: Option<String>,
 	pub bind_to_device: bool,
 	pub mss: Option<i32>,
@@ -13,7 +14,7 @@ pub struct SockOpt {
 
 #[derive(serde::Deserialize)]
 pub struct Outbound {
-	pub opt: SockOpt,
+	pub opt: Opt,
 }
 
 #[derive(serde::Deserialize, Clone)]

@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio::net::{TcpSocket, TcpStream};
 
 #[inline(always)]
-pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpSocket> {
+pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::Opt) -> tokio::io::Result<TcpSocket> {
 	let socket: TcpSocket = if a.is_ipv4() {
 		tokio::net::TcpSocket::new_v4()?
 	} else {
@@ -50,7 +50,7 @@ pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::
 }
 
 #[inline(always)]
-pub async fn stream(a: SocketAddr, sockopt: &crate::config::SockOpt) -> tokio::io::Result<TcpStream> {
+pub async fn stream(a: SocketAddr, sockopt: &crate::config::Opt) -> tokio::io::Result<TcpStream> {
 	let ip = if a.is_ipv4() {
 		IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 	} else {
