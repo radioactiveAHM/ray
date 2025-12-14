@@ -309,9 +309,7 @@ where
 	let (mut client_r, mut client_w) = tokio::io::split(stream);
 	let (mut target_r, mut target_w) = target.split();
 	let mut client_r_pin = std::pin::Pin::new(&mut client_r);
-	let mut client_w_pin = std::pin::Pin::new(&mut client_w);
 	let mut target_r_pin = std::pin::Pin::new(&mut target_r);
-	let mut target_w_pin = std::pin::Pin::new(&mut target_w);
 
 	loop {
 		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.tcp_idle_timeout), async {
@@ -319,11 +317,11 @@ where
 				tokio::select! {
 					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
 						read?;
-						target_w_pin.write_all(client_buf_rb.filled()).await
+						target_w.write_all(client_buf_rb.filled()).await
 					},
 					read = pipe::Fill(&mut target_r_pin, &mut target_buf_rb) => {
 						if !target_buf_rb.filled().is_empty(){
-							client_w_pin.write_all(target_buf_rb.filled()).await?;
+							client_w.write_all(target_buf_rb.filled()).await?;
 						}
 						read
 					},
@@ -332,11 +330,11 @@ where
 				tokio::select! {
 					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
 						read?;
-						target_w_pin.write_all(client_buf_rb.filled()).await
+						target_w.write_all(client_buf_rb.filled()).await
 					},
 					read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
 						read?;
-						client_w_pin.write_all(target_buf_rb.filled()).await
+						client_w.write_all(target_buf_rb.filled()).await
 					},
 				}
 			}
@@ -344,11 +342,11 @@ where
 		.await
 		{
 			Err(_) => {
-				let _ = target_w_pin.shutdown().await;
+				let _ = target_w.shutdown().await;
 				return Err(tokio::io::Error::other("Timeout"));
 			}
 			Ok(Err(e)) => {
-				let _ = target_w_pin.shutdown().await;
+				let _ = target_w.shutdown().await;
 				return Err(e);
 			}
 			_ => (),
@@ -399,7 +397,6 @@ where
 		udp: &udp,
 		b: utils::DeqBuffer::new(w_upbs),
 	};
-	let mut uw_pin = std::pin::Pin::new(&mut uw);
 
 	client_w_pin.write_all(&[0, 0]).await?;
 
@@ -409,7 +406,7 @@ where
 				read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
 					read?;
 					// data buffered in internal buffer so write_all is not needed
-					let _ = uw_pin.write(client_buf_rb.filled()).await?;
+					let _ = uw.write(client_buf_rb.filled()).await?;
 					Ok(())
 				},
 				size = udp.recv(&mut udp_buf[2..]) => {
