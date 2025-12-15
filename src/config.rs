@@ -77,9 +77,9 @@ pub enum Transporter {
 }
 
 impl Transporter {
-	pub fn grab_xhttp(&self) -> Option<Xhttp> {
+	pub fn grab_xhttp(&self) -> Option<&Xhttp> {
 		match self {
-			Self::XHTTP(xhttp) => Some(xhttp.clone()),
+			Self::XHTTP(xhttp) => Some(xhttp),
 			_ => None,
 		}
 	}

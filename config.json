@@ -64,8 +64,8 @@
 		"trust_negative_responses": true,
 		"ip_strategy": "Ipv4thenIpv6",
 		"cache_size": 64,
-		"timeout": 5,
-		"num_concurrent_reqs": 12
+		"timeout": 2,
+		"num_concurrent_reqs": 8
 	},
 	"rules": null
 }

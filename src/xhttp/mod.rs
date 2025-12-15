@@ -26,18 +26,17 @@ pub async fn xhttp_server(
 	resolver: RS,
 	tcp: tokio::net::TcpListener,
 	acceptor: tokio_rustls::TlsAcceptor,
-	transport: crate::config::Xhttp,
+	transport: &'static crate::config::Xhttp,
 	outbound: &'static str,
 ) {
-	let builder = h2_builder(&transport);
-	let http_head: Arc<(Option<String>, String)> = Arc::new((transport.host, transport.path));
+	let builder = h2_builder(transport);
+	let http_head: (&'static Option<String>, &'static String) = (&transport.host, &transport.path);
 	let su_waiter: su::SuWaiter = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
 	loop {
 		match crate::tls::Tc::new(acceptor.clone(), tcp.accept().await) {
 			Ok(tc) => {
 				let resolver = resolver.clone();
 				let builder = builder.clone();
-				let http_head = http_head.clone();
 				let su_waiter = su_waiter.clone();
 				tokio::spawn(async move {
 					match tc.accept().await {
@@ -65,7 +64,7 @@ async fn handle_h2_conn(
 	resolver: RS,
 	builder: h2::server::Builder,
 	outbound: &'static str,
-	http_head: Arc<(Option<String>, String)>,
+	http_head: (&'static Option<String>, &'static String),
 	su_waiter: su::SuWaiter,
 ) -> tokio::io::Result<()> {
 	let peer_addr = tls.get_ref().0.peer_addr()?;
@@ -76,7 +75,6 @@ async fn handle_h2_conn(
 			Some(stream_res) => {
 				let mut stream = stream_res.map_err(tokio::io::Error::other)?;
 				let resolver = resolver.clone();
-				let http_head = http_head.clone();
 				let su_waiter = su_waiter.clone();
 				tokio::spawn(async move {
 					let mut path_parts: Vec<&str> = stream.0.uri().path().split("/").collect();
@@ -94,19 +92,43 @@ async fn handle_h2_conn(
 						}
 
 						let mut su_waiter_locked = su_waiter.lock().await;
-						let stat = su_waiter_locked.remove(&su_uuid);
-						if let Some(waiter) = stat {
-							// send stream
-							let _ = waiter.send(stream).await;
-						} else {
-							let (chan_send, chan_recv) = tokio::sync::mpsc::channel(1);
-							let _ = su_waiter_locked.insert(su_uuid, chan_send);
+						let waiter = su_waiter_locked.remove(&su_uuid);
+						if stream.0.method() == http::Method::POST {
+							if let Some(waiter) = waiter {
+								// A
+								drop(su_waiter_locked);
+								let _ = waiter.0.send(stream).await;
+							} else {
+								// init B
+								let (chan_send, chan_recv) = tokio::sync::mpsc::channel(1);
+								let _ = chan_send.send(stream).await;
+								su_waiter_locked.insert(su_uuid, (chan_send, Some(chan_recv)));
+								drop(su_waiter_locked);
+							}
+						} else if let Some(waiter) = waiter {
+							// GET method
+							// B
 							drop(su_waiter_locked);
-							if let Err(e) =
-								su::stream_up(su_uuid, su_waiter, stream, chan_recv, resolver, outbound, peer_addr)
-									.await
+							if let Some(w_stream) = waiter.1.unwrap().recv().await {
+								if let Err(e) = su::stream_up(stream, w_stream, resolver, outbound, peer_addr).await {
+									log::warn!("{e}");
+								}
+							} else {
+								log::warn!("failed to recv other stream");
+							}
+						} else {
+							// init A
+							let (chan_send, mut chan_recv) = tokio::sync::mpsc::channel(1);
+							su_waiter_locked.insert(su_uuid, (chan_send, None));
+							drop(su_waiter_locked);
+							if let Ok(Some(w_stream)) =
+								tokio::time::timeout(std::time::Duration::from_secs(5), chan_recv.recv()).await
 							{
-								log::warn!("{e}")
+								if let Err(e) = su::stream_up(stream, w_stream, resolver, outbound, peer_addr).await {
+									log::warn!("{e}");
+								}
+							} else {
+								log::warn!("failed/timeout to recv other stream")
 							}
 						}
 					} else {
@@ -212,7 +234,7 @@ async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::i
 	.await
 }
 
-fn http_head_match(mut path: &str, headers: &http::HeaderMap, http_head: Arc<(Option<String>, String)>) -> bool {
+fn http_head_match(mut path: &str, headers: &http::HeaderMap, http_head: (&Option<String>, &String)) -> bool {
 	if path.is_empty() {
 		path = "/";
 	}

@@ -35,8 +35,8 @@
         "file": "l.log" // set null to log to Stdout
     },
     "tls_buffer_limit": 64,
-    "tcp_proxy_buffer_size": [8, 8], // The internal buffer size (read, write) for the TCP proxy. Unit is Kb.
-    "udp_proxy_buffer_size": [8, 8], // The internal buffer size (read, write) for the UDP proxy. Unit is Kb.
+    "tcp_proxy_buffer_size": [128, 128], // The internal buffer size (read, write) for the TCP proxy. Unit is Kb.
+    "udp_proxy_buffer_size": [8, 128], // The internal buffer size (read, write) for the UDP proxy. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds.
     "udp_idle_timeout": 90, // UDP idle timeout in seconds.
     "users": [ // User list
@@ -83,7 +83,7 @@
         "ip_strategy": "Ipv4thenIpv6", // Options: Ipv4Only, Ipv6Only, Ipv4AndIpv6, Ipv6thenIpv4, Ipv4thenIpv6,
         "cache_size": 64, // Cache size is in number of records
         "timeout": 2, // Specify the timeout for a request.
-        "num_concurrent_reqs": 2 // Number of concurrent requests per query. Where more than one nameserver is configured, this configures the resolver to send queries to a number of servers in parallel. Defaults to 2; 0 or 1 will execute requests serially.
+        "num_concurrent_reqs": 8 // Number of concurrent requests per query. Where more than one nameserver is configured, this configures the resolver to send queries to a number of servers in parallel. Defaults to 2; 0 or 1 will execute requests serially.
     },
     "rules": null
 }
@@ -140,7 +140,7 @@ XHTTP
         "XHTTP" : {
             "path": "/",
             "host": "example.com", // If set null any host will be accepted.
-            "max_frame_size": 8, // must be less or equal to tcp_proxy_buffer_size. Unit is Kb.
+            "max_frame_size": 16, // must be less or equal to tcp_proxy_buffer_size and at least 16kb. Unit is Kb.
             "max_send_buffer_size": 1024, // Sets the maximum send buffer size per stream. Unit is Kb.
             "initial_connection_window_size": 16384, // Indicates the initial window size (in octets) for connection-level flow control for received data. Unit is Kb.
             "initial_window_size": 1024 // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.

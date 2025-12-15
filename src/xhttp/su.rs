@@ -2,39 +2,26 @@ pub type SuWaiter = std::sync::Arc<
 	tokio::sync::Mutex<
 		std::collections::HashMap<
 			uuid::Uuid,
-			tokio::sync::mpsc::Sender<(http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>)>,
+			(
+				tokio::sync::mpsc::Sender<(http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>)>,
+				Option<
+					tokio::sync::mpsc::Receiver<(
+						http::Request<h2::RecvStream>,
+						h2::server::SendResponse<bytes::Bytes>,
+					)>,
+				>,
+			),
 		>,
 	>,
 >;
 
 pub async fn stream_up(
-	id: uuid::Uuid,
-	su_waiter: SuWaiter,
-	stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
-	mut chan_recv: tokio::sync::mpsc::Receiver<(http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>)>,
+	mut r_stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
+	mut w_stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	resolver: super::RS,
 	outbound: &'static str,
 	peer_addr: std::net::SocketAddr,
 ) -> tokio::io::Result<()> {
-	let stream2 = match tokio::time::timeout(std::time::Duration::from_secs(5), chan_recv.recv()).await {
-		Ok(Some(stream)) => stream,
-		// if timeout or channel closed drop su from waiter
-		Ok(None) => {
-			let _ = su_waiter.lock().await.remove(&id);
-			return Err(tokio::io::Error::other("failed to recv other stream"));
-		}
-		_ => {
-			let _ = su_waiter.lock().await.remove(&id);
-			return Err(tokio::io::Error::other("timeout recv other stream"));
-		}
-	};
-
-	let (mut r_stream, mut w_stream) = if stream.0.method() == http::method::Method::GET {
-		(stream, stream2)
-	} else {
-		(stream2, stream)
-	};
-
 	let res = {
 		let mut payload = Vec::new();
 		super::stream_recv_timeout(w_stream.0.body_mut(), &mut payload).await?;
