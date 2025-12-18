@@ -311,11 +311,16 @@ where
 	let mut client_r_pin = std::pin::Pin::new(&mut client_r);
 	let mut target_r_pin = std::pin::Pin::new(&mut target_r);
 
+	let mut up_stream_closed = false;
+	let err: tokio::io::Error;
 	loop {
 		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.tcp_idle_timeout), async {
 			if opt.tcp_read_buffered {
 				tokio::select! {
 					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
+						if read.is_err() {
+							up_stream_closed = true;
+						}
 						read?;
 						target_w.write_all(client_buf_rb.filled()).await
 					},
@@ -329,6 +334,9 @@ where
 			} else {
 				tokio::select! {
 					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
+						if read.is_err() {
+							up_stream_closed = true;
+						}
 						read?;
 						target_w.write_all(client_buf_rb.filled()).await
 					},
@@ -342,16 +350,36 @@ where
 		.await
 		{
 			Err(_) => {
-				let _ = target_w.shutdown().await;
-				return Err(tokio::io::Error::other("Timeout"));
+				err = tokio::io::Error::other("Timeout");
+				break;
 			}
 			Ok(Err(e)) => {
-				let _ = target_w.shutdown().await;
-				return Err(e);
+				err = e;
+				break;
 			}
 			_ => (),
 		}
 	}
+
+	if up_stream_closed {
+		loop {
+			match tokio::time::timeout(
+				std::time::Duration::from_secs(3),
+				pipe::Read(&mut target_r_pin, &mut target_buf_rb),
+			)
+			.await
+			{
+				Ok(Err(_)) | Err(_) => break,
+				_ => (),
+			};
+			if client_w.write_all(target_buf_rb.filled()).await.is_err() {
+				break;
+			}
+		}
+	}
+
+	let _ = target_w.shutdown().await;
+	Err(err)
 }
 
 async fn handle_udp<S>(
@@ -400,12 +428,16 @@ where
 
 	client_w_pin.write_all(&[0, 0]).await?;
 
+	let mut up_stream_closed = false;
+	let err: tokio::io::Error;
 	loop {
 		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.udp_idle_timeout), async {
 			tokio::select! {
 				read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
+					if read.is_err() {
+						up_stream_closed = true;
+					}
 					read?;
-					// data buffered in internal buffer so write_all is not needed
 					let _ = uw.write(client_buf_rb.filled()).await?;
 					Ok(())
 				},
@@ -419,12 +451,30 @@ where
 		.await
 		{
 			Err(_) => {
-				return Err(tokio::io::Error::other("Timeout"));
+				err = tokio::io::Error::other("Timeout");
+				break;
 			}
 			Ok(Err(e)) => {
-				return Err(e);
+				err = e;
+				break;
 			}
 			_ => (),
 		}
 	}
+
+	if up_stream_closed {
+		loop {
+			match tokio::time::timeout(std::time::Duration::from_secs(3), udp.recv(&mut udp_buf[2..])).await {
+				Ok(Err(_)) | Err(_) => break,
+				Ok(Ok(size)) => {
+					udp_buf[..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
+					if client_w_pin.write_all(&udp_buf[..size + 2]).await.is_err() {
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	Err(err)
 }

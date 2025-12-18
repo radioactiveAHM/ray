@@ -8,8 +8,9 @@
 - [x] HTTP
 - [x] HTTP Upgrade
 - [x] WS (WebSocket)
-- [x] XHTTP H2 stream-one + stream-up
-- [ ] XHTTP H2 packet-up
+- [x] XHTTP H2 stream-one (stable)
+- [x] XHTTP H2 stream-up (stable)
+- [x] XHTTP H2 packet-up (might be unstable)
 
 ## Vless Request Commands
 

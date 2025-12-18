@@ -1,3 +1,4 @@
+mod pu;
 mod su;
 
 use std::{net::SocketAddr, sync::Arc};
@@ -31,17 +32,20 @@ pub async fn xhttp_server(
 ) {
 	let builder = h2_builder(transport);
 	let http_head: (&'static Option<String>, &'static String) = (&transport.host, &transport.path);
-	let su_waiter: su::SuWaiter = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+	let waiter: Waiter = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+	let pc: PuConns = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
 	loop {
 		match crate::tls::Tc::new(acceptor.clone(), tcp.accept().await) {
 			Ok(tc) => {
 				let resolver = resolver.clone();
 				let builder = builder.clone();
-				let su_waiter = su_waiter.clone();
+				let waiter = waiter.clone();
+				let pc = pc.clone();
 				tokio::spawn(async move {
 					match tc.accept().await {
 						Ok(tls) => {
-							if let Err(e) = handle_h2_conn(tls, resolver, builder, outbound, http_head, su_waiter).await
+							if let Err(e) =
+								handle_h2_conn(tls, resolver, builder, outbound, http_head, waiter, pc).await
 							{
 								log::warn!("{e}");
 							}
@@ -59,13 +63,15 @@ pub async fn xhttp_server(
 	}
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_h2_conn(
 	tls: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
 	resolver: RS,
 	builder: h2::server::Builder,
 	outbound: &'static str,
 	http_head: (&'static Option<String>, &'static String),
-	su_waiter: su::SuWaiter,
+	waiter: Waiter,
+	pc: PuConns,
 ) -> tokio::io::Result<()> {
 	let peer_addr = tls.get_ref().0.peer_addr()?;
 	let mut h2c: h2::server::Connection<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, Bytes> =
@@ -75,10 +81,70 @@ async fn handle_h2_conn(
 			Some(stream_res) => {
 				let mut stream = stream_res.map_err(tokio::io::Error::other)?;
 				let resolver = resolver.clone();
-				let su_waiter = su_waiter.clone();
+				let waiter = waiter.clone();
+				let pc = pc.clone();
 				tokio::spawn(async move {
 					let mut path_parts: Vec<&str> = stream.0.uri().path().split("/").collect();
 					if let Some(last) = path_parts.last()
+						&& let Ok(sec) = last.parse::<usize>()
+					{
+						// packet up
+						let pu_uuid = if let Some(uuid_str) = path_parts.get(path_parts.len() - 2)
+							&& let Ok(pu_uuid) = uuid::Uuid::parse_str(uuid_str)
+						{
+							pu_uuid
+						} else {
+							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
+							return;
+						};
+						let content_len: usize = if let Some(header) = stream.0.headers().get("content-length")
+							&& let Ok(cl_str) = header.to_str()
+							&& let Ok(cl) = cl_str.parse()
+						{
+							cl
+						} else {
+							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
+							return;
+						};
+						path_parts.pop();
+						path_parts.pop();
+						let path = path_parts.join("/") + "/";
+						if http_head_match(&path, stream.0.headers(), http_head) {
+							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
+							return;
+						}
+
+						let mut pc_lock = pc.lock().await;
+						if sec == 0 {
+							let mut waiter_locked = waiter.lock().await;
+							let waiter = waiter_locked.remove(&pu_uuid);
+							let (sender, recver) = tokio::sync::mpsc::channel(64);
+							if let Some(waiter) = waiter {
+								drop(waiter_locked);
+								let _ = waiter.0.send(UpStream::PU(recver)).await;
+							} else {
+								let (chan_send, chan_recv) = tokio::sync::mpsc::channel(1);
+								let _ = chan_send.send(UpStream::PU(recver)).await;
+								waiter_locked.insert(pu_uuid, (chan_send, Some(chan_recv)));
+								drop(waiter_locked);
+							}
+							let pu_con = Arc::new(Pu {
+								closed: std::sync::atomic::AtomicBool::new(false),
+								sec: std::sync::atomic::AtomicUsize::new(0),
+								notify: tokio::sync::Notify::new(),
+								sender,
+							});
+							pc_lock.insert(pu_uuid, pu_con.clone());
+							drop(pc_lock);
+							pu::write_to_channel(stream, pu_con, content_len, sec).await;
+						} else if let Some(pu_con) = pc_lock.get(&pu_uuid).cloned() {
+							drop(pc_lock);
+							pu::write_to_channel(stream, pu_con, content_len, sec).await;
+						} else {
+							log::warn!("packet-up post uuid not found");
+							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
+						}
+					} else if let Some(last) = path_parts.last()
 						&& last.len() == 36
 						&& let Ok(su_uuid) = uuid::Uuid::parse_str(last)
 					{
@@ -91,41 +157,69 @@ async fn handle_h2_conn(
 							return;
 						}
 
-						let mut su_waiter_locked = su_waiter.lock().await;
-						let waiter = su_waiter_locked.remove(&su_uuid);
+						let mut waiter_locked = waiter.lock().await;
+						let waiter = waiter_locked.remove(&su_uuid);
 						if stream.0.method() == http::Method::POST {
+							// POST method
 							if let Some(waiter) = waiter {
 								// A
-								drop(su_waiter_locked);
-								let _ = waiter.0.send(stream).await;
+								drop(waiter_locked);
+								let _ = waiter.0.send(UpStream::SU(stream)).await;
 							} else {
 								// init B
 								let (chan_send, chan_recv) = tokio::sync::mpsc::channel(1);
-								let _ = chan_send.send(stream).await;
-								su_waiter_locked.insert(su_uuid, (chan_send, Some(chan_recv)));
-								drop(su_waiter_locked);
+								let _ = chan_send.send(UpStream::SU(stream)).await;
+								waiter_locked.insert(su_uuid, (chan_send, Some(chan_recv)));
+								drop(waiter_locked);
 							}
 						} else if let Some(waiter) = waiter {
 							// GET method
 							// B
-							drop(su_waiter_locked);
-							if let Some(w_stream) = waiter.1.unwrap().recv().await {
-								if let Err(e) = su::stream_up(stream, w_stream, resolver, outbound, peer_addr).await {
-									log::warn!("{e}");
+							drop(waiter_locked);
+							if let Some(upstream) = waiter.1.unwrap().recv().await {
+								match upstream {
+									UpStream::SU(w_stream) => {
+										if let Err(e) =
+											su::stream_up(stream, w_stream, resolver, outbound, peer_addr).await
+										{
+											log::warn!("{e}");
+										}
+									}
+									UpStream::PU(r) => {
+										if let Err(e) =
+											pu::packet_up(su_uuid, pc, stream, r, resolver, outbound, peer_addr).await
+										{
+											log::warn!("{e}");
+										}
+									}
 								}
 							} else {
 								log::warn!("failed to recv other stream");
 							}
 						} else {
+							// GET method
 							// init A
 							let (chan_send, mut chan_recv) = tokio::sync::mpsc::channel(1);
-							su_waiter_locked.insert(su_uuid, (chan_send, None));
-							drop(su_waiter_locked);
-							if let Ok(Some(w_stream)) =
+							waiter_locked.insert(su_uuid, (chan_send, None));
+							drop(waiter_locked);
+							if let Ok(Some(upstream)) =
 								tokio::time::timeout(std::time::Duration::from_secs(5), chan_recv.recv()).await
 							{
-								if let Err(e) = su::stream_up(stream, w_stream, resolver, outbound, peer_addr).await {
-									log::warn!("{e}");
+								match upstream {
+									UpStream::SU(w_stream) => {
+										if let Err(e) =
+											su::stream_up(stream, w_stream, resolver, outbound, peer_addr).await
+										{
+											log::warn!("{e}");
+										}
+									}
+									UpStream::PU(r) => {
+										if let Err(e) =
+											pu::packet_up(su_uuid, pc, stream, r, resolver, outbound, peer_addr).await
+										{
+											log::warn!("{e}");
+										}
+									}
 								}
 							} else {
 								log::warn!("failed/timeout to recv other stream")
@@ -162,51 +256,80 @@ async fn stream_one(
 	outbound: &'static str,
 	peer_addr: SocketAddr,
 ) -> tokio::io::Result<()> {
-	let res = {
-		let mut payload = Vec::new();
+	let mut payload = Vec::new();
+	stream_recv_timeout(req.body_mut(), &mut payload).await?;
+	if payload.len() < 19 {
+		// minimum is mux header
 		stream_recv_timeout(req.body_mut(), &mut payload).await?;
-		if payload.len() < 19 {
-			// minimum is mux header
-			stream_recv_timeout(req.body_mut(), &mut payload).await?;
-		} else {
-			// try to read again if exist to complete
-			try_stream_recv(req.body_mut(), &mut payload).await?;
-		}
+	} else {
+		// try to read again if exist to complete
+		try_stream_recv(req.body_mut(), &mut payload).await?;
+	}
 
-		let vless = crate::vless::Vless::new(&payload, &resolver).await?;
-		if crate::auth::authenticate(&vless, peer_addr) {
-			return Err(crate::verror::VError::AuthenticationFailed.into());
-		}
+	let vless = crate::vless::Vless::new(&payload, &resolver).await?;
+	if crate::auth::authenticate(&vless, peer_addr) {
+		return Err(crate::verror::VError::AuthenticationFailed.into());
+	}
 
-		let http_resp = http::Response::builder()
-			.header("X-Accel-Buffering", "no")
-			.header("Cache-Control", "no-store")
-			.header("Content-Type", "text/event-stream")
-			.version(http::Version::HTTP_2)
-			.status(http::StatusCode::OK)
-			.body(())
-			.unwrap();
-		let w = resp.send_response(http_resp, false).map_err(tokio::io::Error::other)?;
-		let mut h2t = H2t {
-			stream: (req.into_body(), w),
-		};
+	let http_resp = http::Response::builder()
+		.header("X-Accel-Buffering", "no")
+		.header("Cache-Control", "no-store")
+		.header("Content-Type", "text/event-stream")
+		.version(http::Version::HTTP_2)
+		.status(http::StatusCode::OK)
+		.body(())
+		.unwrap();
+	let mut w = resp.send_response(http_resp, false).map_err(tokio::io::Error::other)?;
+	let mut h2t = H2t {
+		stream: (req.body_mut(), &mut w),
+	};
 
-		match vless.rt {
-			crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, outbound).await,
-			crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, outbound).await,
-			crate::vless::RequestCommand::MUX => {
-				crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, outbound, peer_addr.ip()).await
-			}
+	let res = match vless.rt {
+		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, outbound).await,
+		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, outbound).await,
+		crate::vless::RequestCommand::MUX => {
+			crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, outbound, peer_addr.ip()).await
 		}
 	};
-	resp.send_reset(h2::Reason::CANCEL);
+
+	let _ = w.send_data(bytes::Bytes::copy_from_slice(&[]), true);
+	let _ = tokio::time::timeout(
+		std::time::Duration::from_secs(9),
+		std::future::poll_fn(|cx| w.poll_reset(cx)),
+	)
+	.await;
 	res
 }
 
-// utils
+#[allow(clippy::large_enum_variant)]
+enum UpStream {
+	SU((http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>)),
+	PU(tokio::sync::mpsc::Receiver<bytes::Bytes>),
+}
+
+type Waiter = std::sync::Arc<
+	tokio::sync::Mutex<
+		std::collections::HashMap<
+			uuid::Uuid,
+			(
+				tokio::sync::mpsc::Sender<UpStream>,
+				Option<tokio::sync::mpsc::Receiver<UpStream>>,
+			),
+		>,
+	>,
+>;
+
+type PuConns = std::sync::Arc<tokio::sync::Mutex<std::collections::HashMap<uuid::Uuid, std::sync::Arc<Pu>>>>;
+
+struct Pu {
+	closed: std::sync::atomic::AtomicBool,
+	sec: std::sync::atomic::AtomicUsize,
+	notify: tokio::sync::Notify,
+	sender: tokio::sync::mpsc::Sender<bytes::Bytes>,
+}
 
 async fn stream_recv_timeout(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
-	let data = tokio::time::timeout(std::time::Duration::from_secs(5), rs.data())
+	let data = tokio::time::timeout(std::time::Duration::from_secs(12), rs.data())
 		.await?
 		.ok_or(tokio::io::Error::new(
 			std::io::ErrorKind::ConnectionAborted,
@@ -261,11 +384,11 @@ fn http_head_match(mut path: &str, headers: &http::HeaderMap, http_head: (&Optio
 }
 
 // utils
-struct H2t {
-	stream: (h2::RecvStream, h2::SendStream<bytes::Bytes>),
+struct H2t<'a> {
+	stream: (&'a mut h2::RecvStream, &'a mut h2::SendStream<bytes::Bytes>),
 }
 
-impl AsyncRead for H2t {
+impl<'a> AsyncRead for H2t<'a> {
 	fn poll_read(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
@@ -292,7 +415,7 @@ impl AsyncRead for H2t {
 	}
 }
 
-impl AsyncWrite for H2t {
+impl<'a> AsyncWrite for H2t<'a> {
 	fn poll_write(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
@@ -302,15 +425,6 @@ impl AsyncWrite for H2t {
 		let buflen = buf.len();
 
 		this.stream.1.reserve_capacity(buflen);
-
-		if this.stream.1.capacity() >= buflen {
-			this.stream
-				.1
-				.send_data(Bytes::copy_from_slice(buf), false)
-				.map_err(tokio::io::Error::other)?;
-			return std::task::Poll::Ready(Ok(buflen));
-		}
-
 		match std::task::ready!(this.stream.1.poll_capacity(cx)) {
 			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
 				std::io::ErrorKind::ConnectionAborted,
@@ -343,10 +457,9 @@ impl AsyncWrite for H2t {
 	}
 
 	fn poll_shutdown(
-		mut self: std::pin::Pin<&mut Self>,
+		self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,
 	) -> std::task::Poll<Result<(), std::io::Error>> {
-		self.stream.1.send_reset(h2::Reason::CANCEL);
 		std::task::Poll::Ready(Ok(()))
 	}
 }
