@@ -135,9 +135,7 @@ pub async fn packet_up(
 			}
 		};
 
-		let _ = w
-			.send_data(bytes::Bytes::copy_from_slice(&[]), true)
-			.map_err(tokio::io::Error::other);
+		let _ = w.send_data(bytes::Bytes::new(), true).map_err(tokio::io::Error::other);
 		drop(recver);
 		let _ = tokio::time::timeout(
 			std::time::Duration::from_secs(9),
@@ -146,7 +144,7 @@ pub async fn packet_up(
 		.await;
 		res
 	};
-	let _ = pc.lock().await.remove(&id);
+	let _ = pc.write().await.remove(&id);
 	res
 }
 

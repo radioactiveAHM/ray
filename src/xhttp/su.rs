@@ -46,9 +46,7 @@ pub async fn stream_up(
 		}
 	};
 
-	let _ = w
-		.send_data(bytes::Bytes::copy_from_slice(&[]), true)
-		.map_err(tokio::io::Error::other);
+	let _ = w.send_data(bytes::Bytes::new(), true).map_err(tokio::io::Error::other);
 	let _ = tokio::time::timeout(
 		std::time::Duration::from_secs(9),
 		std::future::poll_fn(|cx| w.poll_reset(cx)),
