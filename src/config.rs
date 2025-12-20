@@ -54,7 +54,7 @@ pub struct Ws {
 	pub frame_size: Option<usize>,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize)]
 pub struct Xhttp {
 	pub path: String,
 	pub host: Option<String>,
@@ -64,9 +64,15 @@ pub struct Xhttp {
 	pub max_send_buffer_size: Option<usize>,
 	pub initial_connection_window_size: Option<u32>,
 	pub initial_window_size: Option<u32>,
+
+	// stream-up
+	pub stream_up_keepalive: Option<((u64, u64), (usize, usize))>,
+	// packet up
+	pub initial_channel_size: usize,
+	pub recv_timeout: u64,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Transporter {
 	TCP,

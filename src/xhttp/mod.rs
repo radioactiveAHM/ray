@@ -31,7 +31,6 @@ pub async fn xhttp_server(
 	outbound: &'static str,
 ) {
 	let builder = h2_builder(transport);
-	let http_head: (&'static Option<String>, &'static String) = (&transport.host, &transport.path);
 	let waiter: Waiter = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
 	let pc: PuConns = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 	loop {
@@ -45,7 +44,7 @@ pub async fn xhttp_server(
 					match tc.accept().await {
 						Ok(tls) => {
 							if let Err(e) =
-								handle_h2_conn(tls, resolver, builder, outbound, http_head, waiter, pc).await
+								handle_h2_conn(transport, tls, outbound, resolver, builder, waiter, pc).await
 							{
 								log::warn!("h2: {e}");
 							}
@@ -65,11 +64,11 @@ pub async fn xhttp_server(
 
 #[allow(clippy::too_many_arguments)]
 async fn handle_h2_conn(
+	transport: &'static crate::config::Xhttp,
 	tls: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+	outbound: &'static str,
 	resolver: RS,
 	builder: h2::server::Builder,
-	outbound: &'static str,
-	http_head: (&'static Option<String>, &'static String),
 	waiter: Waiter,
 	pc: PuConns,
 ) -> tokio::io::Result<()> {
@@ -108,7 +107,7 @@ async fn handle_h2_conn(
 						path_parts.pop();
 						path_parts.pop();
 						let path = path_parts.join("/") + "/";
-						if http_head_match(&path, stream.0.headers(), http_head) {
+						if http_head_match(&path, stream.0.headers(), &transport.host, &transport.path) {
 							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
 							return;
 						}
@@ -117,7 +116,7 @@ async fn handle_h2_conn(
 						if sec == 0 {
 							let mut waiter_locked = waiter.lock().await;
 							let waiter = waiter_locked.remove(&pu_uuid);
-							let (sender, recver) = tokio::sync::mpsc::channel(64);
+							let (sender, recver) = tokio::sync::mpsc::channel(transport.initial_channel_size);
 							if let Some(waiter) = waiter {
 								drop(waiter_locked);
 								let _ = waiter.0.send(UpStream::PU(recver)).await;
@@ -136,10 +135,26 @@ async fn handle_h2_conn(
 							});
 							pc_lock.insert(pu_uuid, pu_con.clone());
 							drop(pc_lock);
-							pu::write_to_channel(stream, pu_con, content_len, sec).await;
+							pu::write_to_channel(
+								stream,
+								pu_con,
+								content_len,
+								sec,
+								transport.initial_channel_size,
+								transport.recv_timeout,
+							)
+							.await;
 						} else if let Some(pu_con) = pc_lock.get(&pu_uuid).cloned() {
 							drop(pc_lock);
-							pu::write_to_channel(stream, pu_con, content_len, sec).await;
+							pu::write_to_channel(
+								stream,
+								pu_con,
+								content_len,
+								sec,
+								transport.initial_channel_size,
+								transport.recv_timeout,
+							)
+							.await;
 						} else {
 							log::warn!("packet-up post uuid not found");
 							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
@@ -151,7 +166,7 @@ async fn handle_h2_conn(
 						// stream up
 						path_parts.pop();
 						let path = path_parts.join("/") + "/";
-						if http_head_match(&path, stream.0.headers(), http_head) {
+						if http_head_match(&path, stream.0.headers(), &transport.host, &transport.path) {
 							log::warn!("http path/host error");
 							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
 							return;
@@ -179,8 +194,15 @@ async fn handle_h2_conn(
 							if let Some(upstream) = waiter.1.unwrap().recv().await {
 								match upstream {
 									UpStream::SU(w_stream) => {
-										if let Err(e) =
-											su::stream_up(stream, w_stream, resolver, outbound, peer_addr).await
+										if let Err(e) = su::stream_up(
+											stream,
+											w_stream,
+											resolver,
+											outbound,
+											peer_addr,
+											transport.stream_up_keepalive,
+										)
+										.await
 										{
 											log::warn!("{e}");
 										}
@@ -207,8 +229,15 @@ async fn handle_h2_conn(
 							{
 								match upstream {
 									UpStream::SU(w_stream) => {
-										if let Err(e) =
-											su::stream_up(stream, w_stream, resolver, outbound, peer_addr).await
+										if let Err(e) = su::stream_up(
+											stream,
+											w_stream,
+											resolver,
+											outbound,
+											peer_addr,
+											transport.stream_up_keepalive,
+										)
+										.await
 										{
 											log::warn!("{e}");
 										}
@@ -228,7 +257,7 @@ async fn handle_h2_conn(
 					} else {
 						// stream one
 						let path = path_parts.join("/");
-						if http_head_match(&path, stream.0.headers(), http_head) {
+						if http_head_match(&path, stream.0.headers(), &transport.host, &transport.path) {
 							log::warn!("http path/host error");
 							stream.1.send_reset(h2::Reason::REFUSED_STREAM);
 							return;
@@ -241,7 +270,7 @@ async fn handle_h2_conn(
 				});
 			}
 			Some(Err(e)) => {
-				// close all packet up conns related to this h2 connection.
+				// close all packet-up GET streams related to this h2 connection.
 				for (_, pu_con) in pc.read().await.iter() {
 					if pu_con.owner == peer_addr {
 						let _ = pu_con.sender.send(Bytes::new()).await;
@@ -369,13 +398,13 @@ async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::i
 	.await
 }
 
-fn http_head_match(mut path: &str, headers: &http::HeaderMap, http_head: (&Option<String>, &String)) -> bool {
+fn http_head_match(mut path: &str, headers: &http::HeaderMap, c_host: &Option<String>, c_path: &str) -> bool {
 	if path.is_empty() {
 		path = "/";
 	}
 
-	if http_head.1 == path {
-		if let Some(host) = &http_head.0 {
+	if c_path == path {
+		if let Some(host) = &c_host {
 			if let Some(value) = headers.get("host")
 				&& let Ok(req_host) = value.to_str()
 			{

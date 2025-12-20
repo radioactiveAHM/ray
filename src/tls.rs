@@ -1,4 +1,9 @@
-use tokio_rustls::TlsAcceptor;
+use std::sync::Arc;
+
+use tokio_rustls::{
+	TlsAcceptor,
+	rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+};
 
 pub struct Tc {
 	pub acceptor: TlsAcceptor,
@@ -22,4 +27,19 @@ impl Tc {
 			tls
 		})
 	}
+}
+
+pub fn tls_server(tls_conf: &crate::config::Tls) -> TlsAcceptor {
+	let certs = CertificateDer::pem_file_iter(&tls_conf.certificate)
+		.unwrap()
+		.collect::<Result<Vec<_>, _>>()
+		.unwrap();
+	let key = PrivateKeyDer::from_pem_file(&tls_conf.key).unwrap();
+	let mut c: tokio_rustls::rustls::ServerConfig = tokio_rustls::rustls::ServerConfig::builder()
+		.with_no_client_auth()
+		.with_single_cert(certs, key)
+		.unwrap();
+	c.alpn_protocols = tls_conf.alpn.iter().map(|p| p.as_bytes().to_vec()).collect();
+	c.max_fragment_size = tls_conf.max_fragment_size;
+	TlsAcceptor::from(Arc::new(c))
 }

@@ -6,18 +6,14 @@ pub async fn recv_bytes_buffered(
 	stream_recver: &mut h2::RecvStream,
 	bytes_vec: &mut Vec<bytes::Bytes>,
 	content_len: usize,
+	recv_timeout: u64,
 ) -> Option<()> {
 	let mut recved = 0;
 	loop {
 		if recved >= content_len {
 			break;
 		}
-		match tokio::time::timeout(
-			std::time::Duration::from_secs(crate::CONFIG.tcp_idle_timeout),
-			stream_recver.data(),
-		)
-		.await
-		{
+		match tokio::time::timeout(std::time::Duration::from_secs(recv_timeout), stream_recver.data()).await {
 			Err(_) | Ok(Some(Err(_))) => return None,
 			Ok(None) => break,
 			Ok(Some(Ok(data))) => {
@@ -35,13 +31,15 @@ pub async fn write_to_channel(
 	pu: Arc<super::Pu>,
 	content_len: usize,
 	sec: usize,
+	initial_channel_size: usize,
+	recv_timeout: u64,
 ) {
 	let recver = stream.0.body_mut();
 	let sender = &pu.sender;
-	let mut buffed_bytes = Vec::with_capacity(64);
+	let mut buffed_bytes = Vec::with_capacity(initial_channel_size);
 
 	// buffer data
-	if recv_bytes_buffered(recver, &mut buffed_bytes, content_len)
+	if recv_bytes_buffered(recver, &mut buffed_bytes, content_len, recv_timeout)
 		.await
 		.is_none()
 	{
@@ -98,10 +96,20 @@ pub async fn packet_up(
 ) -> tokio::io::Result<()> {
 	let res = {
 		let mut payload = Vec::new();
-		recv_timeout(&mut recver, &mut payload).await?;
+		payload.extend_from_slice(
+			&recver
+				.recv()
+				.await
+				.ok_or(tokio::io::Error::other("packet-up read channel closed"))?,
+		);
 		if payload.len() < 19 {
 			// minimum is mux header
-			recv_timeout(&mut recver, &mut payload).await?;
+			payload.extend_from_slice(
+				&recver
+					.recv()
+					.await
+					.ok_or(tokio::io::Error::other("packet-up read channel closed"))?,
+			);
 		}
 
 		let vless = crate::vless::Vless::new(&payload, &resolver).await?;
@@ -146,14 +154,6 @@ pub async fn packet_up(
 	};
 	let _ = pc.write().await.remove(&id);
 	res
-}
-
-async fn recv_timeout(r: &mut tokio::sync::mpsc::Receiver<bytes::Bytes>, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
-	let data = tokio::time::timeout(std::time::Duration::from_secs(12), r.recv())
-		.await?
-		.ok_or(tokio::io::Error::other("recv channel closed"))?;
-	vec.extend_from_slice(&data);
-	Ok(())
 }
 
 struct H2t<'a> {

@@ -141,10 +141,15 @@ XHTTP
         "XHTTP" : {
             "path": "/",
             "host": "example.com", // If set null any host will be accepted.
-            "max_frame_size": 16, // must be less or equal to tcp_proxy_buffer_size and at least 16kb. Unit is Kb.
+            "max_frame_size": 16, // Must be less or equal to tcp_proxy_buffer_size and at least 16kb. Unit is Kb.
             "max_send_buffer_size": 1024, // Sets the maximum send buffer size per stream. Unit is Kb.
             "initial_connection_window_size": 16384, // Indicates the initial window size (in octets) for connection-level flow control for received data. Unit is Kb.
-            "initial_window_size": 1024 // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.
+            "initial_window_size": 1024, // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.
+            // stream-up
+            "stream_up_keepalive": [[60, 90], [10, 128]], //up-stream data link keep-alive. [duration(sec)[min-max], bytes[min, max]]. set null to disable.
+            // packet-up
+            "initial_channel_size": 8, // Defines the initial channel size used for POST data and the buffer capacity for POST request data frames.
+            "recv_timeout": 12 // Defines the timeout (in seconds) applied to each POST request when awaiting a data frame.
         }
     }
 ```

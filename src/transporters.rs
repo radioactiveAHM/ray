@@ -174,5 +174,13 @@ where
 		log::warn!("{peer_addr}: closed connection");
 	}
 
+	let _ = wst
+		.ws
+		.send(tokio_websockets::Message::close(
+			Some(tokio_websockets::CloseCode::NORMAL_CLOSURE),
+			"pipe closed",
+		))
+		.await;
+
 	wst.shutdown().await
 }

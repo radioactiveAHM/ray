@@ -1,15 +1,5 @@
-use std::{
-	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-	sync::Arc,
-};
-
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_rustls::{
-	TlsAcceptor,
-	rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
-};
-
-use crate::utils::convert_u16_to_two_u8s_be;
 
 mod auth;
 mod config;
@@ -113,23 +103,8 @@ async fn app() {
 			let tcp = tokio::net::TcpListener::bind(inbound.listen).await.unwrap();
 			if inbound.tls.enable {
 				// with tls
-				let certs = CertificateDer::pem_file_iter(&inbound.tls.certificate)
-					.unwrap()
-					.collect::<Result<Vec<_>, _>>()
-					.unwrap();
-				let key = PrivateKeyDer::from_pem_file(&inbound.tls.key).unwrap();
-				let mut c: tokio_rustls::rustls::ServerConfig = tokio_rustls::rustls::ServerConfig::builder()
-					.with_no_client_auth()
-					.with_single_cert(certs, key)
-					.unwrap();
-				c.alpn_protocols = inbound.tls.alpn.iter().map(|p| p.as_bytes().to_vec()).collect();
-				c.max_fragment_size = inbound.tls.max_fragment_size;
-				let acceptor = TlsAcceptor::from(Arc::new(c));
-
+				let acceptor = tls::tls_server(&inbound.tls);
 				if let Some(xhttp) = inbound.transporter.grab_xhttp() {
-					if !inbound.tls.enable {
-						panic!("enable tls for xhttp")
-					}
 					return xhttp::xhttp_server(resolver, tcp, acceptor, xhttp, &inbound.outbound).await;
 				}
 
@@ -138,8 +113,7 @@ async fn app() {
 						Ok(tc) => {
 							let resolver = resolver.clone();
 							tokio::spawn(async move {
-								if let Err(e) =
-									tls_handler(tc, resolver, inbound.transporter.clone(), &inbound.outbound).await
+								if let Err(e) = tls_handler(tc, resolver, &inbound.transporter, &inbound.outbound).await
 								{
 									log::warn!("TLS: {e}")
 								}
@@ -157,14 +131,9 @@ async fn app() {
 						let resolver = resolver.clone();
 						tokio::spawn(async move {
 							if let Ok(peer_addr) = stream.peer_addr()
-								&& let Err(e) = stream_handler(
-									stream,
-									peer_addr,
-									resolver,
-									inbound.transporter.clone(),
-									&inbound.outbound,
-								)
-								.await
+								&& let Err(e) =
+									stream_handler(stream, peer_addr, resolver, &inbound.transporter, &inbound.outbound)
+										.await
 							{
 								log::warn!("NOTLS: {e}")
 							}
@@ -182,7 +151,7 @@ async fn app() {
 async fn tls_handler(
 	tc: tls::Tc,
 	resolver: resolver::RS,
-	transport: config::Transporter,
+	transport: &'static config::Transporter,
 	outbound: &'static str,
 ) -> tokio::io::Result<()> {
 	let peer_addr: SocketAddr = tc.stream.0.peer_addr()?;
@@ -195,7 +164,7 @@ async fn stream_handler<S>(
 	mut stream: S,
 	peer_addr: SocketAddr,
 	resolver: resolver::RS,
-	transport: config::Transporter,
+	transport: &'static config::Transporter,
 	outbound: &'static str,
 ) -> tokio::io::Result<()>
 where
@@ -443,7 +412,7 @@ where
 				},
 				size = udp.recv(&mut udp_buf[2..]) => {
 					let size = size?;
-					udp_buf[..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
+					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
 					client_w_pin.write_all(&udp_buf[..size + 2]).await
 				},
 			}
@@ -467,7 +436,7 @@ where
 			match tokio::time::timeout(std::time::Duration::from_secs(3), udp.recv(&mut udp_buf[2..])).await {
 				Ok(Err(_)) | Err(_) => break,
 				Ok(Ok(size)) => {
-					udp_buf[..2].copy_from_slice(&convert_u16_to_two_u8s_be(size as u16));
+					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
 					if client_w_pin.write_all(&udp_buf[..size + 2]).await.is_err() {
 						break;
 					}
