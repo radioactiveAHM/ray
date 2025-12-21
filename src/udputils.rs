@@ -1,32 +1,24 @@
 use crate::utils::{self, convert_two_u8s_to_u16_be};
-use tokio::io::AsyncWrite;
-
 pub struct UdpWriter<'a> {
 	pub udp: &'a tokio::net::UdpSocket,
 	pub b: utils::DeqBuffer,
 }
-impl AsyncWrite for UdpWriter<'_> {
+impl<'a> UdpWriter<'a> {
 	#[inline(always)]
-	fn poll_write(
-		mut self: std::pin::Pin<&mut Self>,
-		cx: &mut std::task::Context<'_>,
-		buf: &[u8],
-	) -> std::task::Poll<Result<usize, std::io::Error>> {
+	pub async fn send_packets(&mut self, buf: &[u8]) -> tokio::io::Result<()> {
 		if buf.is_empty() {
-			return std::task::Poll::Ready(Ok(0));
+			return Ok(());
 		}
-
 		self.b.write(buf);
 
-		// we don't want to blow up the memory
 		if self.b.slice().len() > 1024 * 16 {
-			return std::task::Poll::Ready(Err(crate::verror::VError::BufferOverflow.into()));
+			return Err(crate::verror::VError::BufferOverflow.into());
 		}
 
 		let mut deadloop = 0u8;
 		loop {
 			if deadloop == 20 {
-				return std::task::Poll::Ready(Err(crate::verror::VError::UdpDeadLoop.into()));
+				return Err(crate::verror::VError::UdpDeadLoop.into());
 			}
 			deadloop += 1;
 
@@ -40,45 +32,20 @@ impl AsyncWrite for UdpWriter<'_> {
 
 			// len must not be 0
 			if psize == 0 {
-				return std::task::Poll::Ready(Err(crate::verror::VError::MailFormedUdpPacket.into()));
+				return Err(crate::verror::VError::MailFormedUdpPacket.into());
 			}
 
 			if psize <= size - 2 {
 				// we have bytes to send
 				let packet = &self.b.slice()[2..psize + 2];
-				match self.udp.poll_send(cx, packet) {
-					std::task::Poll::Pending => continue,
-					std::task::Poll::Ready(Ok(_)) => {
-						self.b.remove(psize + 2);
-						continue;
-					}
-					std::task::Poll::Ready(Err(e)) => {
-						return std::task::Poll::Ready(Err(e));
-					}
-				}
+				self.udp.send(packet).await?;
+				self.b.remove(psize + 2);
 			} else {
 				// empty or incomplete bytes
 				break;
 			}
 		}
-
-		std::task::Poll::Ready(Ok(buf.len()))
-	}
-
-	#[inline(always)]
-	fn poll_shutdown(
-		self: std::pin::Pin<&mut Self>,
-		_cx: &mut std::task::Context<'_>,
-	) -> std::task::Poll<Result<(), std::io::Error>> {
-		std::task::Poll::Ready(Ok(()))
-	}
-
-	#[inline(always)]
-	fn poll_flush(
-		self: std::pin::Pin<&mut Self>,
-		_cx: &mut std::task::Context<'_>,
-	) -> std::task::Poll<Result<(), std::io::Error>> {
-		std::task::Poll::Ready(Ok(()))
+		Ok(())
 	}
 }
 

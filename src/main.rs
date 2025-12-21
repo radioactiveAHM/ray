@@ -370,13 +370,6 @@ where
 	let udp = udputils::udp_socket(SocketAddr::new(ip, 0), opt).await?;
 	udp.connect(target).await?;
 
-	// first packet might not be complete
-	// todo: caused panic: range start index 28 out of range for slice of length 27
-	if !&payload[body..].is_empty() {
-		udp.send(&payload[body + 2..]).await?;
-	}
-	drop(payload);
-
 	let (r_upbs, w_upbs) = (
 		CONFIG.udp_proxy_buffer_size.0 * 1024,
 		CONFIG.udp_proxy_buffer_size.1 * 1024,
@@ -395,6 +388,12 @@ where
 		b: utils::DeqBuffer::new(w_upbs),
 	};
 
+	if !&payload[body..].is_empty() {
+		client_buf_rb.put_slice(&payload[body..]);
+		uw.send_packets(client_buf_rb.filled()).await?;
+	}
+	drop(payload);
+
 	client_w_pin.write_all(&[0, 0]).await?;
 
 	let mut up_stream_closed = false;
@@ -407,7 +406,7 @@ where
 						up_stream_closed = true;
 					}
 					read?;
-					let _ = uw.write(client_buf_rb.filled()).await?;
+					uw.send_packets(client_buf_rb.filled()).await?;
 					Ok(())
 				},
 				size = udp.recv(&mut udp_buf[2..]) => {

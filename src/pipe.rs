@@ -1,7 +1,4 @@
-use tokio::{
-	io::{AsyncRead, ReadBuf},
-	time::timeout,
-};
+use tokio::io::{AsyncRead, ReadBuf};
 
 pub struct Read<'a, 'b, 'c, R>(pub &'a mut std::pin::Pin<&'b mut R>, pub &'a mut ReadBuf<'c>);
 impl<'a, 'b, 'c, R> Future for Read<'a, 'b, 'c, R>
@@ -59,18 +56,4 @@ where
 			};
 		}
 	}
-}
-
-#[inline(always)]
-pub async fn read_timeout<R>(
-	r: &mut std::pin::Pin<&mut R>,
-	buf: &mut ReadBuf<'_>,
-	timeout_dur: u64,
-) -> tokio::io::Result<()>
-where
-	R: AsyncRead + Unpin,
-{
-	timeout(std::time::Duration::from_secs(timeout_dur), Read(r, buf))
-		.await
-		.map_err(tokio::io::Error::other)?
 }
