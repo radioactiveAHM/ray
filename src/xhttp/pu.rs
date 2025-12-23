@@ -95,7 +95,7 @@ pub async fn packet_up(
 	peer_addr: std::net::SocketAddr,
 ) -> tokio::io::Result<()> {
 	let res = {
-		let mut payload = Vec::new();
+		let mut payload = Vec::with_capacity(1024 * 8);
 		payload.extend_from_slice(
 			&recver
 				.recv()
@@ -110,6 +110,10 @@ pub async fn packet_up(
 					.await
 					.ok_or(tokio::io::Error::other("packet-up read channel closed"))?,
 			);
+		}
+		// try recv again
+		if let Ok(data) = &recver.try_recv() {
+			payload.extend_from_slice(data);
 		}
 
 		let vless = crate::vless::Vless::new(&payload, &resolver).await?;

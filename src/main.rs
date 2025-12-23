@@ -260,6 +260,7 @@ where
 
 	if !&payload[body..].is_empty() {
 		target.write_all(&payload[body..]).await?;
+		target.flush().await?;
 	}
 	drop(payload);
 
@@ -291,11 +292,13 @@ where
 							up_stream_closed = true;
 						}
 						read?;
-						target_w.write_all(client_buf_rb.filled()).await
+						target_w.write_all(client_buf_rb.filled()).await?;
+						target_w.flush().await
 					},
 					read = pipe::Fill(&mut target_r_pin, &mut target_buf_rb) => {
 						if !target_buf_rb.filled().is_empty(){
 							client_w.write_all(target_buf_rb.filled()).await?;
+							client_w.flush().await?;
 						}
 						read
 					},
@@ -307,11 +310,13 @@ where
 							up_stream_closed = true;
 						}
 						read?;
-						target_w.write_all(client_buf_rb.filled()).await
+						target_w.write_all(client_buf_rb.filled()).await?;
+						target_w.flush().await
 					},
 					read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
 						read?;
-						client_w.write_all(target_buf_rb.filled()).await
+						client_w.write_all(target_buf_rb.filled()).await?;
+						client_w.flush().await
 					},
 				}
 			}
@@ -342,6 +347,9 @@ where
 				_ => (),
 			};
 			if client_w.write_all(target_buf_rb.filled()).await.is_err() {
+				break;
+			}
+			if client_w.flush().await.is_err() {
 				break;
 			}
 		}
@@ -412,7 +420,8 @@ where
 				size = udp.recv(&mut udp_buf[2..]) => {
 					let size = size?;
 					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
-					client_w_pin.write_all(&udp_buf[..size + 2]).await
+					client_w_pin.write_all(&udp_buf[..size + 2]).await?;
+					client_w_pin.flush().await
 				},
 			}
 		})
@@ -437,6 +446,9 @@ where
 				Ok(Ok(size)) => {
 					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
 					if client_w_pin.write_all(&udp_buf[..size + 2]).await.is_err() {
+						break;
+					}
+					if client_w_pin.flush().await.is_err() {
 						break;
 					}
 				}

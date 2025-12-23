@@ -179,7 +179,8 @@ where
 		]
 		.concat(),
 	)
-	.await
+	.await?;
+	w.flush().await
 }
 
 async fn handle_first_packet(
@@ -194,15 +195,23 @@ async fn handle_first_packet(
 			if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
 				// Stat: New Subjoin
 				let target = parse_target(&internal_buf[2..], resolver, domain_map).await?;
-				let opt = internal_buf[5] == 1;
-				if opt {
-					let opt_len =
-						convert_two_u8s_to_u16_be([internal_buf[head_size + 2], internal_buf[head_size + 3]]) as usize;
-					let opt_body = &internal_buf[2 + head_size + 2..];
-					if opt_body.len() >= opt_len {
-						// send body and clean up
-						let _ = udp.send_to(&opt_body[..opt_len], target).await?;
-						internal_buf.drain(..2 + head_size + 2 + opt_len);
+				if internal_buf[5] == 1 {
+					if let Some(opt_len_octet1) = internal_buf.get(head_size + 2)
+						&& let Some(opt_len_octet2) = internal_buf.get(head_size + 3)
+					{
+						let opt_len = convert_two_u8s_to_u16_be([*opt_len_octet1, *opt_len_octet2]) as usize;
+						let opt_body = &internal_buf[2 + head_size + 2..];
+						if opt_body.len() >= opt_len {
+							// send body and clean up
+							let _ = udp.send_to(&opt_body[..opt_len], target).await?;
+							internal_buf.drain(..2 + head_size + 2 + opt_len);
+						} else {
+							// opt body incomplete
+							return Ok(());
+						}
+					} else {
+						// opt first two bytes is not in buffer
+						return Ok(());
 					}
 				} else {
 					// no body, remove header and continue
@@ -249,16 +258,22 @@ where
 		if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
 			// Stat: New Subjoin and Keep frames
 			let target = parse_target(&internal_buf[2..], resolver, domain_map).await?;
-			let opt = internal_buf[5] == 1;
-			if opt {
-				let opt_len =
-					convert_two_u8s_to_u16_be([internal_buf[head_size + 2], internal_buf[head_size + 3]]) as usize;
-				let opt_body = &internal_buf[2 + head_size + 2..];
-				if opt_body.len() >= opt_len {
-					// send body and clean up
-					let _ = udp.send_to(&opt_body[..opt_len], target).await?;
-					internal_buf.drain(..2 + head_size + 2 + opt_len);
+			if internal_buf[5] == 1 {
+				if let Some(opt_len_octet1) = internal_buf.get(head_size + 2)
+					&& let Some(opt_len_octet2) = internal_buf.get(head_size + 3)
+				{
+					let opt_len = convert_two_u8s_to_u16_be([*opt_len_octet1, *opt_len_octet2]) as usize;
+					let opt_body = &internal_buf[2 + head_size + 2..];
+					if opt_body.len() >= opt_len {
+						// send body and clean up
+						let _ = udp.send_to(&opt_body[..opt_len], target).await?;
+						internal_buf.drain(..2 + head_size + 2 + opt_len);
+					} else {
+						// opt body incomplete
+						break;
+					}
 				} else {
+					// opt first two bytes is not in buffer
 					break;
 				}
 			} else {

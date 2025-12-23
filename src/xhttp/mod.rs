@@ -296,15 +296,14 @@ async fn stream_one(
 	outbound: &'static str,
 	peer_addr: SocketAddr,
 ) -> tokio::io::Result<()> {
-	let mut payload = Vec::new();
+	let mut payload = Vec::with_capacity(1024 * 8);
 	stream_recv_timeout(req.body_mut(), &mut payload).await?;
 	if payload.len() < 19 {
 		// minimum is mux header
 		stream_recv_timeout(req.body_mut(), &mut payload).await?;
-	} else {
-		// try to read again if exist to complete
-		try_stream_recv(req.body_mut(), &mut payload).await?;
 	}
+	// try to read again
+	try_stream_recv(req.body_mut(), &mut payload).await?;
 
 	let vless = crate::vless::Vless::new(&payload, &resolver).await?;
 	if crate::auth::authenticate(&vless, peer_addr) {

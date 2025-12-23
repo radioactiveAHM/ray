@@ -8,15 +8,14 @@ pub async fn stream_up(
 	peer_addr: std::net::SocketAddr,
 	stream_up_keepalive: Option<((u64, u64), (usize, usize))>,
 ) -> tokio::io::Result<()> {
-	let mut payload = Vec::new();
+	let mut payload = Vec::with_capacity(1024 * 8);
 	super::stream_recv_timeout(w_stream.0.body_mut(), &mut payload).await?;
 	if payload.len() < 19 {
 		// minimum is mux header
 		super::stream_recv_timeout(w_stream.0.body_mut(), &mut payload).await?;
-	} else {
-		// try to read again if exist to complete
-		super::try_stream_recv(w_stream.0.body_mut(), &mut payload).await?;
 	}
+	// try to read again
+	super::try_stream_recv(w_stream.0.body_mut(), &mut payload).await?;
 
 	let vless = crate::vless::Vless::new(&payload, &resolver).await?;
 	if crate::auth::authenticate(&vless, peer_addr) {

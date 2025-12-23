@@ -1,4 +1,4 @@
-use futures_util::{Sink, SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 pub async fn httpupgrade_transporter<S>(
@@ -116,25 +116,21 @@ where
 		self.ws.poll_flush_unpin(cx).map_err(tokio::io::Error::other)
 	}
 	fn poll_shutdown(
-		mut self: std::pin::Pin<&mut Self>,
-		cx: &mut std::task::Context<'_>,
+		self: std::pin::Pin<&mut Self>,
+		_cx: &mut std::task::Context<'_>,
 	) -> std::task::Poll<Result<(), std::io::Error>> {
-		self.ws.poll_close_unpin(cx).map_err(tokio::io::Error::other)
+		std::task::Poll::Ready(Ok(()))
 	}
 	fn poll_write(
 		mut self: std::pin::Pin<&mut Self>,
-		cx: &mut std::task::Context<'_>,
+		_cx: &mut std::task::Context<'_>,
 		buf: &[u8],
 	) -> std::task::Poll<Result<usize, std::io::Error>> {
-		let mut ws_pin = std::pin::Pin::new(&mut self.ws);
-		match ws_pin
-			.as_mut()
-			.start_send(tokio_websockets::Message::binary(buf.to_vec()))
+		match self
+			.ws
+			.start_send_unpin(tokio_websockets::Message::binary(buf.to_vec()))
 		{
-			Ok(_) => {
-				std::task::ready!(ws_pin.poll_flush(cx)).map_err(tokio::io::Error::other)?;
-				std::task::Poll::Ready(Ok(buf.len()))
-			}
+			Ok(_) => std::task::Poll::Ready(Ok(buf.len())),
 			Err(e) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
 		}
 	}
@@ -149,17 +145,30 @@ pub async fn websocket_transport<S>(
 where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
-	let vless: crate::vless::Vless;
-	let mut payload = Vec::new();
-	if let Some(Ok(vless_header_message)) = ws.next().await {
-		vless = crate::vless::Vless::new(vless_header_message.as_payload(), &resolver).await?;
-		if crate::auth::authenticate(&vless, peer_addr) {
-			return Err(crate::verror::VError::AuthenticationFailed.into());
-		}
-		payload.extend_from_slice(vless_header_message.as_payload());
-	} else {
-		return Err(crate::verror::VError::TransporterError.into());
-	};
+	let mut payload = Vec::with_capacity(1024 * 8);
+	payload.extend_from_slice(
+		ws.next()
+			.await
+			.ok_or(crate::verror::VError::WsClosed)?
+			.map_err(tokio::io::Error::other)?
+			.as_payload(),
+	);
+
+	if payload.len() < 19 {
+		payload.extend_from_slice(
+			tokio::time::timeout(std::time::Duration::from_secs(12), ws.next())
+				.await?
+				.ok_or(crate::verror::VError::WsClosed)?
+				.map_err(tokio::io::Error::other)?
+				.as_payload(),
+		);
+	}
+	try_recv(&mut ws, &mut payload).await?;
+
+	let vless = crate::vless::Vless::new(&payload, &resolver).await?;
+	if crate::auth::authenticate(&vless, peer_addr) {
+		return Err(crate::verror::VError::AuthenticationFailed.into());
+	}
 
 	let mut wst = Wst { ws, closed: false };
 	if let Err(e) = match vless.rt {
@@ -181,6 +190,21 @@ where
 			"pipe closed",
 		))
 		.await;
+	Ok(())
+}
 
-	wst.shutdown().await
+async fn try_recv<S: AsyncRead + AsyncWrite + Unpin>(
+	ws: &mut tokio_websockets::WebSocketStream<S>,
+	buf: &mut Vec<u8>,
+) -> tokio::io::Result<()> {
+	std::future::poll_fn(|cx| match ws.poll_next_unpin(cx) {
+		std::task::Poll::Pending => std::task::Poll::Ready(Ok(())),
+		std::task::Poll::Ready(Some(Ok(message))) => {
+			buf.extend_from_slice(message.as_payload());
+			std::task::Poll::Ready(Ok(()))
+		}
+		std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
+		std::task::Poll::Ready(None) => std::task::Poll::Ready(Err(crate::verror::VError::WsClosed.into())),
+	})
+	.await
 }
