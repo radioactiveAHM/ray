@@ -191,32 +191,38 @@ async fn handle_h2_conn(
 							// GET method
 							// B
 							drop(waiter_locked);
-							if let Some(upstream) = waiter.1.unwrap().recv().await {
-								match upstream {
-									UpStream::SU(w_stream) => {
-										if let Err(e) = su::stream_up(
-											stream,
-											w_stream,
-											resolver,
-											outbound,
-											peer_addr,
-											transport.stream_up_keepalive,
-										)
-										.await
-										{
-											log::warn!("{e}");
+							if let Some(mut recver) = waiter.1 {
+								if let Some(upstream) = recver.recv().await {
+									match upstream {
+										UpStream::SU(w_stream) => {
+											if let Err(e) = su::stream_up(
+												stream,
+												w_stream,
+												resolver,
+												outbound,
+												peer_addr,
+												transport.stream_up_keepalive,
+											)
+											.await
+											{
+												log::warn!("{e}");
+											}
+										}
+										UpStream::PU(r) => {
+											if let Err(e) =
+												pu::packet_up(su_uuid, pc, stream, r, resolver, outbound, peer_addr)
+													.await
+											{
+												log::warn!("{e}");
+											}
 										}
 									}
-									UpStream::PU(r) => {
-										if let Err(e) =
-											pu::packet_up(su_uuid, pc, stream, r, resolver, outbound, peer_addr).await
-										{
-											log::warn!("{e}");
-										}
-									}
+								} else {
+									log::warn!("failed to recv other stream");
 								}
 							} else {
-								log::warn!("failed to recv other stream");
+								log::warn!("stream-up protocol error");
+								stream.1.send_reset(h2::Reason::REFUSED_STREAM);
 							}
 						} else {
 							// GET method
