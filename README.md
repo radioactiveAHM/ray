@@ -54,6 +54,7 @@
             "outbound": "direct", // default outbound tag
             "tls": { // TLS Configuration
                 "enable": false, // Enable tls
+                "tls13_tickets": 6,
                 "max_fragment_size": null, // The maximum size of plaintext input to be emitted in a single TLS record. A value of null is equivalent to the TLS maximum of 16 kB. Unit is bytes.
                 "alpn": ["h2", "http/1.1"],
                 "certificate": "cert.pem", // Certificate Path

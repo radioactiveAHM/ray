@@ -34,6 +34,7 @@ pub struct Rule {
 #[derive(serde::Deserialize)]
 pub struct Tls {
 	pub enable: bool,
+	pub tls13_tickets: usize,
 	pub max_fragment_size: Option<usize>,
 	pub alpn: Vec<String>,
 	pub certificate: String,

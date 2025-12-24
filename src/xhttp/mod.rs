@@ -31,20 +31,20 @@ pub async fn xhttp_server(
 	outbound: &'static str,
 ) {
 	let builder = h2_builder(transport);
-	let waiter: Waiter = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+	let waiters: Waiters = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
 	let pc: PuConns = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 	loop {
 		match crate::tls::Tc::new(acceptor.clone(), tcp.accept().await) {
 			Ok(tc) => {
 				let resolver = resolver.clone();
 				let builder = builder.clone();
-				let waiter = waiter.clone();
+				let waiters = waiters.clone();
 				let pc = pc.clone();
 				tokio::spawn(async move {
 					match tc.accept().await {
 						Ok(tls) => {
 							if let Err(e) =
-								handle_h2_conn(transport, tls, outbound, resolver, builder, waiter, pc).await
+								handle_h2_conn(transport, tls, outbound, resolver, builder, waiters, pc).await
 							{
 								log::warn!("h2: {e}");
 							}
@@ -69,7 +69,7 @@ async fn handle_h2_conn(
 	outbound: &'static str,
 	resolver: RS,
 	builder: h2::server::Builder,
-	waiter: Waiter,
+	waiters: Waiters,
 	pc: PuConns,
 ) -> tokio::io::Result<()> {
 	let peer_addr = tls.get_ref().0.peer_addr()?;
@@ -79,7 +79,7 @@ async fn handle_h2_conn(
 		match h2c.accept().await {
 			Some(Ok(mut stream)) => {
 				let resolver = resolver.clone();
-				let waiter = waiter.clone();
+				let waiters = waiters.clone();
 				let pc = pc.clone();
 				tokio::spawn(async move {
 					let mut path_parts: Vec<&str> = stream.0.uri().path().split("/").collect();
@@ -114,7 +114,7 @@ async fn handle_h2_conn(
 
 						let mut pc_lock = pc.write().await;
 						if sec == 0 {
-							let mut waiter_locked = waiter.lock().await;
+							let mut waiter_locked = waiters.lock().await;
 							let waiter = waiter_locked.remove(&pu_uuid);
 							let (sender, recver) = tokio::sync::mpsc::channel(transport.initial_channel_size);
 							if let Some(waiter) = waiter {
@@ -172,7 +172,7 @@ async fn handle_h2_conn(
 							return;
 						}
 
-						let mut waiter_locked = waiter.lock().await;
+						let mut waiter_locked = waiters.lock().await;
 						let waiter = waiter_locked.remove(&su_uuid);
 						if stream.0.method() == http::Method::POST {
 							// POST method
@@ -257,7 +257,8 @@ async fn handle_h2_conn(
 									}
 								}
 							} else {
-								log::warn!("failed/timeout to recv other stream")
+								log::warn!("failed/timeout to recv other stream");
+								waiters.lock().await.remove(&su_uuid);
 							}
 						}
 					} else {
@@ -352,7 +353,7 @@ enum UpStream {
 	PU(tokio::sync::mpsc::Receiver<bytes::Bytes>),
 }
 
-type Waiter = std::sync::Arc<
+type Waiters = std::sync::Arc<
 	tokio::sync::Mutex<
 		std::collections::HashMap<
 			uuid::Uuid,

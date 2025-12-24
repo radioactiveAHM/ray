@@ -41,5 +41,6 @@ pub fn tls_server(tls_conf: &crate::config::Tls) -> TlsAcceptor {
 		.unwrap();
 	c.alpn_protocols = tls_conf.alpn.iter().map(|p| p.as_bytes().to_vec()).collect();
 	c.max_fragment_size = tls_conf.max_fragment_size;
+	c.send_tls13_tickets = tls_conf.tls13_tickets;
 	TlsAcceptor::from(Arc::new(c))
 }

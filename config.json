@@ -12,7 +12,7 @@
 		"level": "error",
 		"file": "l.log"
 	},
-	"tls_buffer_limit": 64,
+	"tls_buffer_limit": 256,
 	"tcp_proxy_buffer_size": [128, 128],
 	"udp_proxy_buffer_size": [8, 128],
 	"tcp_idle_timeout": 150,
@@ -30,6 +30,7 @@
 			"outbound": "direct",
 			"tls": {
 				"enable": false,
+				"tls13_tickets": 6,
 				"max_fragment_size": null,
 				"alpn": ["h2", "http/1.1"],
 				"certificate": "cert.pem",
@@ -40,7 +41,7 @@
 	"outbounds": {
 		"direct": {
 			"opt": {
-				"tcp_read_buffered": false,
+				"tcp_read_buffered": true,
 				"interface": null,
 				"bind_to_device": false,
 				"mss": null,
