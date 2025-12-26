@@ -32,7 +32,7 @@ pub async fn xhttp_server(
 ) {
 	let builder = h2_builder(transport);
 	let waiters: Waiters = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
-	let pc: PuConns = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
+	let pc: PuConns = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
 	loop {
 		match crate::tls::Tc::new(acceptor.clone(), tcp.accept().await) {
 			Ok(tc) => {
@@ -75,12 +75,14 @@ async fn handle_h2_conn(
 	let peer_addr = tls.get_ref().0.peer_addr()?;
 	let mut h2c: h2::server::Connection<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, Bytes> =
 		builder.handshake(tls).await.map_err(tokio::io::Error::other)?;
+	let pu_get_streams = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(8)));
 	loop {
 		match h2c.accept().await {
 			Some(Ok(mut stream)) => {
 				let resolver = resolver.clone();
 				let waiters = waiters.clone();
 				let pc = pc.clone();
+				let pu_get_streams = pu_get_streams.clone();
 				tokio::spawn(async move {
 					let mut path_parts: Vec<&str> = stream.0.uri().path().split("/").collect();
 					if let Some(last) = path_parts.last()
@@ -112,7 +114,7 @@ async fn handle_h2_conn(
 							return;
 						}
 
-						let mut pc_lock = pc.write().await;
+						let mut pc_lock = pc.lock().await;
 						if sec == 0 {
 							let mut waiter_locked = waiters.lock().await;
 							let waiter = waiter_locked.remove(&pu_uuid);
@@ -127,7 +129,6 @@ async fn handle_h2_conn(
 								drop(waiter_locked);
 							}
 							let pu_con = Arc::new(Pu {
-								owner: peer_addr,
 								closed: std::sync::atomic::AtomicBool::new(false),
 								sec: std::sync::atomic::AtomicUsize::new(0),
 								notify: tokio::sync::Notify::new(),
@@ -209,6 +210,7 @@ async fn handle_h2_conn(
 											}
 										}
 										UpStream::PU(r) => {
+											pu_get_streams.lock().await.push(su_uuid);
 											if let Err(e) =
 												pu::packet_up(su_uuid, pc, stream, r, resolver, outbound, peer_addr)
 													.await
@@ -278,8 +280,10 @@ async fn handle_h2_conn(
 			}
 			Some(Err(e)) => {
 				// close all packet-up GET streams related to this h2 connection.
-				for (_, pu_con) in pc.read().await.iter() {
-					if pu_con.owner == peer_addr {
+				for pu_get_streams_uuid in pu_get_streams.lock().await.iter() {
+					// pu_con_res: avoid holding the lock
+					let pu_con_res = pc.lock().await.get(pu_get_streams_uuid).cloned();
+					if let Some(pu_con) = pu_con_res {
 						let _ = pu_con.sender.send(Bytes::new()).await;
 						pu_con.closed.store(true, std::sync::atomic::Ordering::Release);
 						pu_con.notify.notify_waiters();
@@ -288,6 +292,16 @@ async fn handle_h2_conn(
 				return Err(tokio::io::Error::other(e));
 			}
 			None => {
+				// close all packet-up GET streams related to this h2 connection.
+				for pu_get_streams_uuid in pu_get_streams.lock().await.iter() {
+					// pu_con_res: avoid holding the lock
+					let pu_con_res = pc.lock().await.get(pu_get_streams_uuid).cloned();
+					if let Some(pu_con) = pu_con_res {
+						let _ = pu_con.sender.send(Bytes::new()).await;
+						pu_con.closed.store(true, std::sync::atomic::Ordering::Release);
+						pu_con.notify.notify_waiters();
+					}
+				}
 				return Err(tokio::io::Error::new(
 					std::io::ErrorKind::ConnectionAborted,
 					"h2 socket closed",
@@ -365,10 +379,9 @@ type Waiters = std::sync::Arc<
 	>,
 >;
 
-type PuConns = std::sync::Arc<tokio::sync::RwLock<std::collections::HashMap<uuid::Uuid, std::sync::Arc<Pu>>>>;
+type PuConns = std::sync::Arc<tokio::sync::Mutex<std::collections::HashMap<uuid::Uuid, std::sync::Arc<Pu>>>>;
 
 struct Pu {
-	owner: SocketAddr,
 	closed: std::sync::atomic::AtomicBool,
 	sec: std::sync::atomic::AtomicUsize,
 	notify: tokio::sync::Notify,

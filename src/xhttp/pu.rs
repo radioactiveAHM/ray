@@ -156,7 +156,7 @@ pub async fn packet_up(
 		.await;
 		res
 	};
-	let _ = pc.write().await.remove(&id);
+	let _ = pc.lock().await.remove(&id);
 	res
 }
 
