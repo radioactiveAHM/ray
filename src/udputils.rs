@@ -11,10 +11,6 @@ impl<'a> UdpWriter<'a> {
 		}
 		self.b.write(buf);
 
-		if self.b.slice().len() > 1024 * 16 {
-			return Err(crate::verror::VError::BufferOverflow.into());
-		}
-
 		let mut deadloop = 0u8;
 		loop {
 			if deadloop == 20 {

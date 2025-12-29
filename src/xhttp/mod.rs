@@ -7,6 +7,7 @@ use crate::resolver::RS;
 use bytes::Bytes;
 use tokio::io::{AsyncRead, AsyncWrite};
 
+#[inline(always)]
 fn h2_builder(c: &crate::config::Xhttp) -> h2::server::Builder {
 	let mut h2_builder = h2::server::Builder::new();
 	if let Some(initial_connection_window_size) = c.initial_connection_window_size {
@@ -76,6 +77,22 @@ async fn handle_h2_conn(
 	let mut h2c: h2::server::Connection<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, Bytes> =
 		builder.handshake(tls).await.map_err(tokio::io::Error::other)?;
 	let pu_get_streams = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(8)));
+
+	// close all packet-up GET streams related to this h2 connection.
+	let clean_up = async {
+		for pu_get_streams_uuid in pu_get_streams.lock().await.iter() {
+			// pu_con_res: avoid holding the lock
+			let pu_con_res = pc.lock().await.get(pu_get_streams_uuid).cloned();
+			if let Some(pu_con) = pu_con_res {
+				pu_con.closed.store(true, std::sync::atomic::Ordering::Release);
+				pu_con.notify.notify_waiters();
+				if let Ok(sender) = pu_con.sender.reserve().await {
+					sender.send(Bytes::new());
+				}
+			}
+		}
+	};
+
 	loop {
 		match h2c.accept().await {
 			Some(Ok(mut stream)) => {
@@ -251,6 +268,7 @@ async fn handle_h2_conn(
 										}
 									}
 									UpStream::PU(r) => {
+										pu_get_streams.lock().await.push(su_uuid);
 										if let Err(e) =
 											pu::packet_up(su_uuid, pc, stream, r, resolver, outbound, peer_addr).await
 										{
@@ -279,29 +297,11 @@ async fn handle_h2_conn(
 				});
 			}
 			Some(Err(e)) => {
-				// close all packet-up GET streams related to this h2 connection.
-				for pu_get_streams_uuid in pu_get_streams.lock().await.iter() {
-					// pu_con_res: avoid holding the lock
-					let pu_con_res = pc.lock().await.get(pu_get_streams_uuid).cloned();
-					if let Some(pu_con) = pu_con_res {
-						let _ = pu_con.sender.send(Bytes::new()).await;
-						pu_con.closed.store(true, std::sync::atomic::Ordering::Release);
-						pu_con.notify.notify_waiters();
-					}
-				}
+				clean_up.await;
 				return Err(tokio::io::Error::other(e));
 			}
 			None => {
-				// close all packet-up GET streams related to this h2 connection.
-				for pu_get_streams_uuid in pu_get_streams.lock().await.iter() {
-					// pu_con_res: avoid holding the lock
-					let pu_con_res = pc.lock().await.get(pu_get_streams_uuid).cloned();
-					if let Some(pu_con) = pu_con_res {
-						let _ = pu_con.sender.send(Bytes::new()).await;
-						pu_con.closed.store(true, std::sync::atomic::Ordering::Release);
-						pu_con.notify.notify_waiters();
-					}
-				}
+				clean_up.await;
 				return Err(tokio::io::Error::new(
 					std::io::ErrorKind::ConnectionAborted,
 					"h2 socket closed",
@@ -311,6 +311,7 @@ async fn handle_h2_conn(
 	}
 }
 
+#[inline(always)]
 async fn stream_one(
 	(mut req, mut resp): (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	resolver: RS,
@@ -388,6 +389,7 @@ struct Pu {
 	sender: tokio::sync::mpsc::Sender<bytes::Bytes>,
 }
 
+#[inline(always)]
 async fn stream_recv_timeout(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
 	let data = tokio::time::timeout(std::time::Duration::from_secs(12), rs.data())
 		.await?
@@ -403,6 +405,7 @@ async fn stream_recv_timeout(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> toki
 		.map_err(tokio::io::Error::other)
 }
 
+#[inline(always)]
 async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
 	std::future::poll_fn(|cx| match rs.poll_data(cx) {
 		std::task::Poll::Ready(Some(Ok(data))) => {
@@ -417,6 +420,7 @@ async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::i
 	.await
 }
 
+#[inline(always)]
 fn http_head_match(mut path: &str, headers: &http::HeaderMap, c_host: &Option<String>, c_path: &str) -> bool {
 	if path.is_empty() {
 		path = "/";
@@ -449,6 +453,7 @@ struct H2t<'a> {
 }
 
 impl<'a> AsyncRead for H2t<'a> {
+	#[inline(always)]
 	fn poll_read(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
@@ -476,6 +481,7 @@ impl<'a> AsyncRead for H2t<'a> {
 }
 
 impl<'a> AsyncWrite for H2t<'a> {
+	#[inline(always)]
 	fn poll_write(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,

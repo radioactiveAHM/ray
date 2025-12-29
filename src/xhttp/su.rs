@@ -1,5 +1,6 @@
 use rand::Rng;
 
+#[inline(always)]
 pub async fn stream_up(
 	mut r_stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	mut w_stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),

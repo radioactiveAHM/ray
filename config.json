@@ -16,7 +16,7 @@
 	"tcp_proxy_buffer_size": [128, 128],
 	"udp_proxy_buffer_size": [8, 128],
 	"tcp_idle_timeout": 150,
-	"udp_idle_timeout": 90,
+	"udp_idle_timeout": 60,
 	"users": [
 		{
 			"name": "admin",

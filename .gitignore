@@ -5,3 +5,4 @@ cert.pem
 .goreleaser.yaml
 dist/
 t.json
+test_codes.txt

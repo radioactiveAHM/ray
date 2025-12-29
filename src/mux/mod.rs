@@ -1,7 +1,6 @@
 use std::{
 	collections::HashMap,
 	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
-	pin::Pin,
 };
 
 use tokio::{
@@ -10,7 +9,7 @@ use tokio::{
 };
 
 use crate::{
-	utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
+	utils::{DeqBuffer, convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
 	verror::VError,
 };
 
@@ -89,8 +88,8 @@ where
 	let (mut client_r, mut client_w) = tokio::io::split(stream);
 	client_w.write_all(&[0, 0]).await?;
 
-	let mut internal_buffer: Vec<u8> = Vec::with_capacity(w_upbs);
-	internal_buffer.extend_from_slice(&payload[19..]);
+	let mut internal_buffer = DeqBuffer::new(w_upbs);
+	internal_buffer.write(&payload[19..]);
 	drop(payload);
 
 	handle_first_packet(&udp, &mut internal_buffer, &domain_map, &resolver).await?;
@@ -105,11 +104,14 @@ where
 	loop {
 		match tokio::time::timeout(std::time::Duration::from_secs(crate::CONFIG.udp_idle_timeout), async {
 			tokio::select! {
-				res = copy_u2t(&udp, &mut client_w, &domain_map, &mut r_buf) => {
-					res
+				res = udp.recv_from(&mut r_buf) => {
+					let (dgram_len, addr) = res?;
+					copy_u2t(&r_buf[..dgram_len], addr, &mut client_w, &domain_map).await
 				}
-				res = handle_xudp_packets(&mut client_r_pin, &udp, &mut internal_buffer, &domain_map, &resolver, &mut w_buf) => {
-					res
+				res = crate::pipe::Read(&mut client_r_pin, &mut w_buf) => {
+					res?;
+					internal_buffer.write(w_buf.filled());
+					handle_xudp_packets(&udp, &mut internal_buffer, &domain_map, &resolver).await
 				}
 			}
 		})
@@ -132,15 +134,14 @@ where
 
 #[inline(always)]
 pub async fn copy_u2t<W>(
-	udp: &tokio::net::UdpSocket,
+	datagram: &[u8],
+	addr: SocketAddr,
 	w: &mut W,
 	domain_map: &Mutex<HashMap<IpAddr, String>>,
-	buf: &mut [u8],
 ) -> tokio::io::Result<()>
 where
 	W: AsyncWrite + Unpin,
 {
-	let (packet_len, addr) = udp.recv_from(buf).await?;
 	// K: Keep Sub Connections (Keep)
 	//                       H Len   ID   K Opt UDP
 	//                       |___|  |--|  |  |  |
@@ -174,8 +175,8 @@ where
 			&head,
 			port.as_slice(),
 			&addrtype_and_addr,
-			convert_u16_to_two_u8s_be(packet_len as u16).as_slice(),
-			&buf[..packet_len],
+			convert_u16_to_two_u8s_be(datagram.len() as u16).as_slice(),
+			datagram,
 		]
 		.concat(),
 	)
@@ -185,26 +186,27 @@ where
 
 async fn handle_first_packet(
 	udp: &tokio::net::UdpSocket,
-	internal_buf: &mut Vec<u8>,
+	internal_buf: &mut DeqBuffer,
 	domain_map: &Mutex<HashMap<IpAddr, String>>,
 	resolver: &crate::resolver::RS,
 ) -> tokio::io::Result<()> {
-	if internal_buf.len() > 2 {
-		let head_size = convert_two_u8s_to_u16_be([internal_buf[0], internal_buf[1]]) as usize;
-		if internal_buf.len() >= head_size + 2 {
-			if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
+	let internal_buf_slice = internal_buf.slice();
+	if internal_buf_slice.len() > 2 {
+		let head_size = convert_two_u8s_to_u16_be([internal_buf_slice[0], internal_buf_slice[1]]) as usize;
+		if internal_buf_slice.len() >= head_size + 2 {
+			if internal_buf_slice[2..5] == [0, 0, 1] || internal_buf_slice[2..5] == [0, 0, 2] {
 				// Stat: New Subjoin
-				let target = parse_target(&internal_buf[2..], resolver, domain_map).await?;
-				if internal_buf[5] == 1 {
-					if let Some(opt_len_octet1) = internal_buf.get(head_size + 2)
-						&& let Some(opt_len_octet2) = internal_buf.get(head_size + 3)
+				let target = parse_target(&internal_buf_slice[2..], resolver, domain_map).await?;
+				if internal_buf_slice[5] == 1 {
+					if let Some(opt_len_octet1) = internal_buf_slice.get(head_size + 2)
+						&& let Some(opt_len_octet2) = internal_buf_slice.get(head_size + 3)
 					{
 						let opt_len = convert_two_u8s_to_u16_be([*opt_len_octet1, *opt_len_octet2]) as usize;
-						let opt_body = &internal_buf[2 + head_size + 2..];
+						let opt_body = &internal_buf_slice[2 + head_size + 2..];
 						if opt_body.len() >= opt_len {
 							// send body and clean up
 							let _ = udp.send_to(&opt_body[..opt_len], target).await?;
-							internal_buf.drain(..2 + head_size + 2 + opt_len);
+							internal_buf.remove(2 + head_size + 2 + opt_len);
 						} else {
 							// opt body incomplete
 							return Ok(());
@@ -215,12 +217,12 @@ async fn handle_first_packet(
 					}
 				} else {
 					// no body, remove header and continue
-					internal_buf.drain(..2 + head_size);
+					internal_buf.remove(2 + head_size);
 				}
-			} else if internal_buf[2..5] == [0, 0, 4] || internal_buf[2..5] == [0, 0, 3] {
+			} else if internal_buf_slice[2..5] == [0, 0, 4] || internal_buf_slice[2..5] == [0, 0, 3] {
 				// KeepAlive
 				// head len: 4
-				internal_buf.drain(..2 + 4);
+				internal_buf.remove(2 + 4);
 			} else {
 				return Err(crate::verror::VError::MuxError.into());
 			}
@@ -230,44 +232,35 @@ async fn handle_first_packet(
 }
 
 #[inline(always)]
-async fn handle_xudp_packets<R>(
-	r: &mut Pin<&mut R>,
+async fn handle_xudp_packets(
 	udp: &tokio::net::UdpSocket,
-	internal_buf: &mut Vec<u8>,
+	internal_buf: &mut DeqBuffer,
 	domain_map: &Mutex<HashMap<IpAddr, String>>,
 	resolver: &crate::resolver::RS,
-	buf: &mut ReadBuf<'_>,
-) -> tokio::io::Result<()>
-where
-	R: AsyncRead + Unpin,
-{
-	if internal_buf.len() >= 1024 * 16 {
-		return Err(crate::verror::VError::MuxBufferOverflow.into());
-	}
-	crate::pipe::Read(r, buf).await?;
-	internal_buf.extend_from_slice(buf.filled());
+) -> tokio::io::Result<()> {
 	loop {
-		if internal_buf.len() < 2 {
+		let internal_buf_slice = internal_buf.slice();
+		if internal_buf_slice.len() < 2 {
 			break;
 		};
-		let head_size = convert_two_u8s_to_u16_be([internal_buf[0], internal_buf[1]]) as usize;
-		if internal_buf.len() < head_size + 2 {
+		let head_size = convert_two_u8s_to_u16_be([internal_buf_slice[0], internal_buf_slice[1]]) as usize;
+		if internal_buf_slice.len() < head_size + 2 {
 			// incomplete head
 			break;
 		}
-		if internal_buf[2..5] == [0, 0, 1] || internal_buf[2..5] == [0, 0, 2] {
+		if internal_buf_slice[2..5] == [0, 0, 1] || internal_buf_slice[2..5] == [0, 0, 2] {
 			// Stat: New Subjoin and Keep frames
-			let target = parse_target(&internal_buf[2..], resolver, domain_map).await?;
-			if internal_buf[5] == 1 {
-				if let Some(opt_len_octet1) = internal_buf.get(head_size + 2)
-					&& let Some(opt_len_octet2) = internal_buf.get(head_size + 3)
+			let target = parse_target(&internal_buf_slice[2..], resolver, domain_map).await?;
+			if internal_buf_slice[5] == 1 {
+				if let Some(opt_len_octet1) = internal_buf_slice.get(head_size + 2)
+					&& let Some(opt_len_octet2) = internal_buf_slice.get(head_size + 3)
 				{
 					let opt_len = convert_two_u8s_to_u16_be([*opt_len_octet1, *opt_len_octet2]) as usize;
-					let opt_body = &internal_buf[2 + head_size + 2..];
+					let opt_body = &internal_buf_slice[2 + head_size + 2..];
 					if opt_body.len() >= opt_len {
 						// send body and clean up
 						let _ = udp.send_to(&opt_body[..opt_len], target).await?;
-						internal_buf.drain(..2 + head_size + 2 + opt_len);
+						internal_buf.remove(2 + head_size + 2 + opt_len);
 					} else {
 						// opt body incomplete
 						break;
@@ -278,12 +271,12 @@ where
 				}
 			} else {
 				// no body, remove header and continue
-				internal_buf.drain(..2 + head_size);
+				internal_buf.remove(2 + head_size);
 			}
-		} else if internal_buf[2..5] == [0, 0, 4] || internal_buf[2..5] == [0, 0, 3] {
+		} else if internal_buf_slice[2..5] == [0, 0, 4] || internal_buf_slice[2..5] == [0, 0, 3] {
 			// KeepAlive and End frames
 			// head len: 4
-			internal_buf.drain(..2 + 4);
+			internal_buf.remove(2 + 4);
 		} else {
 			return Err(crate::verror::VError::MuxError.into());
 		}

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
+#[inline(always)]
 pub async fn recv_bytes_buffered(
 	stream_recver: &mut h2::RecvStream,
 	bytes_vec: &mut Vec<bytes::Bytes>,
@@ -26,6 +27,7 @@ pub async fn recv_bytes_buffered(
 	Some(())
 }
 
+#[inline(always)]
 pub async fn write_to_channel(
 	mut stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	pu: Arc<super::Pu>,
@@ -72,12 +74,13 @@ pub async fn write_to_channel(
 
 	// send all buffed data
 	for data in buffed_bytes {
-		if sender.send(data).await.is_err() {
+		if let Ok(sender) = sender.reserve().await {
+			sender.send(data);
+		} else {
 			pu.closed.store(true, std::sync::atomic::Ordering::Release);
 			pu.notify.notify_waiters();
 			return;
 		}
-		let _ = sender.reserve().await;
 	}
 
 	pu.sec.store(sec + 1, std::sync::atomic::Ordering::Release);
@@ -85,6 +88,7 @@ pub async fn write_to_channel(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub async fn packet_up(
 	id: uuid::Uuid,
 	pc: super::PuConns,
@@ -168,6 +172,7 @@ struct H2t<'a> {
 }
 
 impl<'a> AsyncRead for H2t<'a> {
+	#[inline(always)]
 	fn poll_read(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
@@ -182,6 +187,7 @@ impl<'a> AsyncRead for H2t<'a> {
 }
 
 impl<'a> AsyncWrite for H2t<'a> {
+	#[inline(always)]
 	fn poll_write(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
