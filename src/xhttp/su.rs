@@ -87,8 +87,8 @@ pub async fn stream_up(
 	};
 
 	let res = match vless.rt {
-		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, outbound).await,
-		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, outbound).await,
+		crate::vless::RequestCommand::TCP => crate::handle_tcp_bytes(vless, payload.to_vec(), &mut h2t, outbound).await,
+		crate::vless::RequestCommand::UDP => crate::handle_udp_bytes(vless, payload.to_vec(), &mut h2t, outbound).await,
 		crate::vless::RequestCommand::MUX => {
 			crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, outbound, peer_addr.ip()).await
 		}

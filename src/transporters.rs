@@ -69,6 +69,37 @@ struct Wst<S: AsyncRead + AsyncWrite + Unpin> {
 	closed: bool,
 }
 
+impl<S> crate::ioutils::AsyncRecvBytes for &mut Wst<S>
+where
+	S: AsyncRead + AsyncWrite + Unpin,
+{
+	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
+		if self.closed {
+			return std::task::Poll::Ready(Err(crate::verror::VError::WsClosed.into()));
+		}
+		match self.ws.poll_next_unpin(cx) {
+			std::task::Poll::Pending => std::task::Poll::Pending,
+			std::task::Poll::Ready(None) => std::task::Poll::Ready(Err(crate::verror::VError::WsClosed.into())),
+			std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
+			std::task::Poll::Ready(Some(Ok(message))) => {
+				if message.is_ping() {
+					let _ = self.ws.start_send_unpin(tokio_websockets::Message::pong(Vec::new()));
+					std::task::Poll::Pending
+				} else {
+					if message.is_close() {
+						self.closed = true;
+					}
+					if !message.as_payload().is_empty() {
+						std::task::Poll::Ready(Ok(message.into_payload().into()))
+					} else {
+						std::task::Poll::Pending
+					}
+				}
+			}
+		}
+	}
+}
+
 impl<S> AsyncRead for Wst<S>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
@@ -172,8 +203,8 @@ where
 
 	let mut wst = Wst { ws, closed: false };
 	if let Err(e) = match vless.rt {
-		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload, &mut wst, outbound).await,
-		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload, &mut wst, outbound).await,
+		crate::vless::RequestCommand::TCP => crate::handle_tcp_bytes(vless, payload, &mut wst, outbound).await,
+		crate::vless::RequestCommand::UDP => crate::handle_udp_bytes(vless, payload, &mut wst, outbound).await,
 		crate::vless::RequestCommand::MUX => {
 			crate::mux::xudp(&mut wst, payload, resolver, outbound, peer_addr.ip()).await
 		}

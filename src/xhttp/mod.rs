@@ -346,8 +346,8 @@ async fn stream_one(
 	};
 
 	let res = match vless.rt {
-		crate::vless::RequestCommand::TCP => crate::handle_tcp(vless, payload.to_vec(), &mut h2t, outbound).await,
-		crate::vless::RequestCommand::UDP => crate::handle_udp(vless, payload.to_vec(), &mut h2t, outbound).await,
+		crate::vless::RequestCommand::TCP => crate::handle_tcp_bytes(vless, payload.to_vec(), &mut h2t, outbound).await,
+		crate::vless::RequestCommand::UDP => crate::handle_udp_bytes(vless, payload.to_vec(), &mut h2t, outbound).await,
 		crate::vless::RequestCommand::MUX => {
 			crate::mux::xudp(&mut h2t, payload.to_vec(), resolver, outbound, peer_addr.ip()).await
 		}
@@ -450,6 +450,26 @@ fn http_head_match(mut path: &str, headers: &http::HeaderMap, c_host: &Option<St
 // utils
 struct H2t<'a> {
 	stream: (&'a mut h2::RecvStream, &'a mut h2::SendStream<bytes::Bytes>),
+}
+
+impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
+	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
+		match std::task::ready!(self.stream.0.poll_data(cx)) {
+			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
+				std::io::ErrorKind::ConnectionAborted,
+				"h2 stream read closed",
+			))),
+			Some(data_res) => {
+				let data = data_res.map_err(tokio::io::Error::other)?;
+				self.stream
+					.0
+					.flow_control()
+					.release_capacity(data.len())
+					.map_err(tokio::io::Error::other)?;
+				std::task::Poll::Ready(Ok(data))
+			}
+		}
+	}
 }
 
 impl<'a> AsyncRead for H2t<'a> {

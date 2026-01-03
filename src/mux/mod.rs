@@ -62,7 +62,7 @@ async fn parse_target(
 }
 
 pub async fn xudp<S>(
-	stream: S,
+	mut stream: S,
 	payload: Vec<u8>,
 	resolver: crate::resolver::RS,
 	outbound: &'static str,
@@ -85,7 +85,7 @@ where
 		crate::CONFIG.udp_proxy_buffer_size.1 * 1024,
 	);
 
-	let (mut client_r, mut client_w) = tokio::io::split(stream);
+	let (client_r, client_w) = crate::ioutils::split(&mut stream);
 	client_w.write_all(&[0, 0]).await?;
 
 	let mut internal_buffer = DeqBuffer::new(w_upbs);
@@ -98,7 +98,7 @@ where
 	let mut w_buf = vec![0; w_upbs];
 	let mut w_buf = ReadBuf::new(&mut w_buf);
 
-	let mut client_r_pin = std::pin::Pin::new(&mut client_r);
+	let mut client_r_pin = std::pin::Pin::new(client_r);
 
 	let err: tokio::io::Error;
 	loop {
@@ -106,7 +106,7 @@ where
 			tokio::select! {
 				res = udp.recv_from(&mut r_buf) => {
 					let (dgram_len, addr) = res?;
-					copy_u2t(&r_buf[..dgram_len], addr, &mut client_w, &domain_map).await
+					copy_u2t(&r_buf[..dgram_len], addr, client_w, &domain_map).await
 				}
 				res = crate::pipe::Read(&mut client_r_pin, &mut w_buf) => {
 					res?;

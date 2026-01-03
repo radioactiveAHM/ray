@@ -3,6 +3,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 mod auth;
 mod config;
+mod ioutils;
 mod mux;
 mod pipe;
 mod resolver;
@@ -276,9 +277,9 @@ where
 	let mut target_buf = vec![0; w_tpbs];
 	let mut target_buf_rb = tokio::io::ReadBuf::new(&mut target_buf);
 
-	let (mut client_r, mut client_w) = tokio::io::split(stream);
+	let (client_r, client_w) = ioutils::split(&mut stream);
 	let (mut target_r, mut target_w) = target.split();
-	let mut client_r_pin = std::pin::Pin::new(&mut client_r);
+	let mut client_r_pin = std::pin::Pin::new(client_r);
 	let mut target_r_pin = std::pin::Pin::new(&mut target_r);
 
 	let mut up_stream_closed = false;
@@ -359,10 +360,117 @@ where
 	Err(err)
 }
 
+async fn handle_tcp_bytes<S>(
+	vless: vless::Vless,
+	payload: Vec<u8>,
+	mut stream: S,
+	outbound: &'static str,
+) -> tokio::io::Result<()>
+where
+	S: ioutils::AsyncRecvBytes + AsyncWrite + Unpin,
+{
+	let (target_addr, domain, body) = vless.target.unwrap();
+	let opt = rules::rules(&target_addr.ip(), domain, outbound)?;
+	let mut target = tcp::stream(target_addr, opt).await?;
+
+	if !&payload[body..].is_empty() {
+		target.write_all(&payload[body..]).await?;
+		target.flush().await?;
+	}
+	drop(payload);
+
+	let w_tpbs = CONFIG.tcp_proxy_buffer_size.1 * 1024;
+
+	stream.write_all(&[0, 0]).await?;
+
+	let mut target_buf = vec![0; w_tpbs];
+	let mut target_buf_rb = tokio::io::ReadBuf::new(&mut target_buf);
+
+	let (client_r, client_w) = ioutils::split(&mut stream);
+	let (mut target_r, mut target_w) = target.split();
+	let mut client_r_pin = std::pin::Pin::new(client_r);
+	let mut target_r_pin = std::pin::Pin::new(&mut target_r);
+
+	let mut up_stream_closed = false;
+	let err: tokio::io::Error;
+	loop {
+		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.tcp_idle_timeout), async {
+			if opt.tcp_read_buffered {
+				tokio::select! {
+					read = pipe::RecvBytes(&mut client_r_pin) => {
+						if read.is_err() {
+							up_stream_closed = true;
+						}
+						target_w.write_all(&read?).await?;
+						target_w.flush().await
+					},
+					read = pipe::Fill(&mut target_r_pin, &mut target_buf_rb) => {
+						if !target_buf_rb.filled().is_empty(){
+							client_w.write_all(target_buf_rb.filled()).await?;
+							client_w.flush().await?;
+						}
+						read
+					},
+				}
+			} else {
+				tokio::select! {
+					read = pipe::RecvBytes(&mut client_r_pin) => {
+						if read.is_err() {
+							up_stream_closed = true;
+						}
+						target_w.write_all(&read?).await?;
+						target_w.flush().await
+					},
+					read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
+						read?;
+						client_w.write_all(target_buf_rb.filled()).await?;
+						client_w.flush().await
+					},
+				}
+			}
+		})
+		.await
+		{
+			Err(_) => {
+				err = tokio::io::Error::other("Timeout");
+				break;
+			}
+			Ok(Err(e)) => {
+				err = e;
+				break;
+			}
+			_ => (),
+		}
+	}
+
+	if up_stream_closed {
+		loop {
+			match tokio::time::timeout(
+				std::time::Duration::from_secs(3),
+				pipe::Read(&mut target_r_pin, &mut target_buf_rb),
+			)
+			.await
+			{
+				Ok(Err(_)) | Err(_) => break,
+				_ => (),
+			};
+			if client_w.write_all(target_buf_rb.filled()).await.is_err() {
+				break;
+			}
+			if client_w.flush().await.is_err() {
+				break;
+			}
+		}
+	}
+
+	let _ = target_w.shutdown().await;
+	Err(err)
+}
+
 async fn handle_udp<S>(
 	vless: vless::Vless,
 	payload: Vec<u8>,
-	stream: S,
+	mut stream: S,
 	outbound: &'static str,
 ) -> tokio::io::Result<()>
 where
@@ -387,9 +495,8 @@ where
 	let mut client_buf_rb = tokio::io::ReadBuf::new(&mut client_buf);
 	let mut udp_buf = vec![0; r_upbs];
 
-	let (mut client_r, mut client_w) = tokio::io::split(stream);
-	let mut client_r_pin = std::pin::Pin::new(&mut client_r);
-	let mut client_w_pin = std::pin::Pin::new(&mut client_w);
+	let (client_r, client_w) = ioutils::split(&mut stream);
+	let mut client_r_pin = std::pin::Pin::new(client_r);
 
 	let mut uw = udputils::UdpWriter {
 		udp: &udp,
@@ -397,12 +504,11 @@ where
 	};
 
 	if !&payload[body..].is_empty() {
-		client_buf_rb.put_slice(&payload[body..]);
-		uw.send_packets(client_buf_rb.filled()).await?;
+		uw.send_packets(&payload[body..]).await?;
 	}
 	drop(payload);
 
-	client_w_pin.write_all(&[0, 0]).await?;
+	client_w.write_all(&[0, 0]).await?;
 
 	let mut up_stream_closed = false;
 	let err: tokio::io::Error;
@@ -420,8 +526,8 @@ where
 				size = udp.recv(&mut udp_buf[2..]) => {
 					let size = size?;
 					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
-					client_w_pin.write_all(&udp_buf[..size + 2]).await?;
-					client_w_pin.flush().await
+					client_w.write_all(&udp_buf[..size + 2]).await?;
+					client_w.flush().await
 				},
 			}
 		})
@@ -445,10 +551,105 @@ where
 				Ok(Err(_)) | Err(_) => break,
 				Ok(Ok(size)) => {
 					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
-					if client_w_pin.write_all(&udp_buf[..size + 2]).await.is_err() {
+					if client_w.write_all(&udp_buf[..size + 2]).await.is_err() {
 						break;
 					}
-					if client_w_pin.flush().await.is_err() {
+					if client_w.flush().await.is_err() {
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	Err(err)
+}
+
+async fn handle_udp_bytes<S>(
+	vless: vless::Vless,
+	payload: Vec<u8>,
+	mut stream: S,
+	outbound: &'static str,
+) -> tokio::io::Result<()>
+where
+	S: ioutils::AsyncRecvBytes + AsyncWrite + Unpin,
+{
+	let (target, domain, body) = vless.target.unwrap();
+	let ip = if target.is_ipv4() {
+		IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+	} else {
+		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
+	};
+	let opt = rules::rules(&target.ip(), domain, outbound)?;
+	let udp = udputils::udp_socket(SocketAddr::new(ip, 0), opt).await?;
+	udp.connect(target).await?;
+
+	let (r_upbs, w_upbs) = (
+		CONFIG.udp_proxy_buffer_size.0 * 1024,
+		CONFIG.udp_proxy_buffer_size.1 * 1024,
+	);
+
+	let mut udp_buf = vec![0; r_upbs];
+
+	let (client_r, client_w) = ioutils::split(&mut stream);
+	let mut client_r_pin = std::pin::Pin::new(client_r);
+
+	let mut uw = udputils::UdpWriter {
+		udp: &udp,
+		b: utils::DeqBuffer::new(w_upbs),
+	};
+
+	if !&payload[body..].is_empty() {
+		uw.send_packets(&payload[body..]).await?;
+	}
+	drop(payload);
+
+	client_w.write_all(&[0, 0]).await?;
+
+	let mut up_stream_closed = false;
+	let err: tokio::io::Error;
+	loop {
+		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.udp_idle_timeout), async {
+			tokio::select! {
+				read = pipe::RecvBytes(&mut client_r_pin) => {
+					if read.is_err() {
+						up_stream_closed = true;
+					}
+					uw.send_packets(&read?).await?;
+					Ok(())
+				},
+				size = udp.recv(&mut udp_buf[2..]) => {
+					let size = size?;
+					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
+					client_w.write_all(&udp_buf[..size + 2]).await?;
+					client_w.flush().await
+				},
+			}
+		})
+		.await
+		{
+			Err(_) => {
+				err = tokio::io::Error::other("Timeout");
+				break;
+			}
+			Ok(Err(e)) => {
+				err = e;
+				break;
+			}
+			_ => (),
+		}
+	}
+
+	if up_stream_closed {
+		loop {
+			match tokio::time::timeout(std::time::Duration::from_secs(3), udp.recv(&mut udp_buf[2..])).await {
+				Ok(Err(_)) | Err(_) => break,
+				Ok(Ok(size)) => {
+					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
+					if client_w.write_all(&udp_buf[..size + 2]).await.is_err() {
+						break;
+					}
+					if client_w.flush().await.is_err() {
 						break;
 					}
 				}
