@@ -21,7 +21,7 @@ pub enum VError {
 	WsClosed,
 }
 impl Display for VError {
-	#[cold]
+	#[inline(always)]
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			VError::Unknown => write!(f, "Unknown"),
@@ -47,7 +47,7 @@ impl Display for VError {
 impl std::error::Error for VError {}
 
 impl From<VError> for tokio::io::Error {
-	#[cold]
+	#[inline(always)]
 	fn from(e: VError) -> Self {
 		tokio::io::Error::other(e)
 	}

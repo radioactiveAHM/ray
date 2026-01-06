@@ -1,3 +1,4 @@
+#[inline(always)]
 pub fn get_opt(tag: &str) -> &'static crate::config::Opt {
 	if let Some(o) = crate::CONFIG.outbounds.get(tag) {
 		&o.opt
@@ -7,6 +8,7 @@ pub fn get_opt(tag: &str) -> &'static crate::config::Opt {
 	}
 }
 
+#[inline(always)]
 pub fn rules(
 	ip: &std::net::IpAddr,
 	target_domain: Option<String>,

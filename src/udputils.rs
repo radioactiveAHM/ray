@@ -80,6 +80,7 @@ pub async fn udp_socket(
 }
 
 #[cfg(target_os = "linux")]
+#[inline(always)]
 pub fn set_udp_bind_device(socket: &socket2::Socket, device: &str) -> Result<(), ()> {
 	if let Ok(device) = std::ffi::CString::new(device) {
 		let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);

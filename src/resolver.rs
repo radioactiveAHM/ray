@@ -65,6 +65,7 @@ pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
 	)
 }
 
+#[inline(always)]
 pub async fn resolve(
 	resolver: &Resolver<
 		hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,

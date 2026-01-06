@@ -1,6 +1,7 @@
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
+#[inline(always)]
 pub async fn httpupgrade_transporter<S>(
 	chttp: &crate::config::Http,
 	buff: &[u8],
@@ -35,6 +36,7 @@ where
 		.await
 }
 
+#[inline(always)]
 pub async fn http_transporter<S>(chttp: &crate::config::Http, buff: &[u8], stream: &mut S) -> tokio::io::Result<()>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
@@ -73,6 +75,7 @@ impl<S> crate::ioutils::AsyncRecvBytes for &mut Wst<S>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
+	#[inline(always)]
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
 		if self.closed {
 			return std::task::Poll::Ready(Err(crate::verror::VError::WsClosed.into()));
@@ -104,6 +107,7 @@ impl<S> AsyncRead for Wst<S>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
+	#[inline(always)]
 	fn poll_read(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
@@ -224,6 +228,7 @@ where
 	Ok(())
 }
 
+#[inline(always)]
 async fn try_recv<S: AsyncRead + AsyncWrite + Unpin>(
 	ws: &mut tokio_websockets::WebSocketStream<S>,
 	buf: &mut Vec<u8>,

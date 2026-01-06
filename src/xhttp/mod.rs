@@ -453,6 +453,7 @@ struct H2t<'a> {
 }
 
 impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
+	#[inline(always)]
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
 		match std::task::ready!(self.stream.0.poll_data(cx)) {
 			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
@@ -535,6 +536,7 @@ impl<'a> AsyncWrite for H2t<'a> {
 		}
 	}
 
+	#[inline(always)]
 	fn poll_flush(
 		self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,
@@ -542,6 +544,7 @@ impl<'a> AsyncWrite for H2t<'a> {
 		std::task::Poll::Ready(Ok(()))
 	}
 
+	#[inline(always)]
 	fn poll_shutdown(
 		self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,
