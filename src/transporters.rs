@@ -210,7 +210,7 @@ where
 		crate::vless::RequestCommand::TCP => crate::handle_tcp_bytes(vless, payload, &mut wst, outbound).await,
 		crate::vless::RequestCommand::UDP => crate::handle_udp_bytes(vless, payload, &mut wst, outbound).await,
 		crate::vless::RequestCommand::MUX => {
-			crate::mux::xudp(&mut wst, payload, resolver, outbound, peer_addr.ip()).await
+			crate::mux::xudp_bytes(&mut wst, payload, resolver, outbound, peer_addr.ip()).await
 		}
 	} {
 		log::warn!("{peer_addr}: {e}");

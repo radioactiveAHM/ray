@@ -278,9 +278,9 @@ where
 	let mut target_buf_rb = tokio::io::ReadBuf::new(&mut target_buf);
 
 	let (client_r, client_w) = ioutils::split(&mut stream);
-	let (mut target_r, mut target_w) = target.split();
+	let (target_r, target_w) = ioutils::split(&mut target);
 	let mut client_r_pin = std::pin::Pin::new(client_r);
-	let mut target_r_pin = std::pin::Pin::new(&mut target_r);
+	let mut target_r_pin = std::pin::Pin::new(target_r);
 
 	let mut up_stream_closed = false;
 	let err: tokio::io::Error;
@@ -387,9 +387,9 @@ where
 	let mut target_buf_rb = tokio::io::ReadBuf::new(&mut target_buf);
 
 	let (client_r, client_w) = ioutils::split(&mut stream);
-	let (mut target_r, mut target_w) = target.split();
+	let (target_r, target_w) = ioutils::split(&mut target);
 	let mut client_r_pin = std::pin::Pin::new(client_r);
-	let mut target_r_pin = std::pin::Pin::new(&mut target_r);
+	let mut target_r_pin = std::pin::Pin::new(target_r);
 
 	let mut up_stream_closed = false;
 	let err: tokio::io::Error;

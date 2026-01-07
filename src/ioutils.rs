@@ -3,7 +3,7 @@ pub trait AsyncRecvBytes {
 }
 
 #[inline(always)]
-pub fn split<T>(xref: &mut T) -> (&mut T, &mut T) {
+pub const fn split<T>(xref: &mut T) -> (&mut T, &mut T) {
 	unsafe {
 		(
 			core::mem::transmute::<&mut T, &mut T>(xref),

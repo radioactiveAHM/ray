@@ -132,6 +132,74 @@ where
 	Err(err)
 }
 
+pub async fn xudp_bytes<S>(
+	mut stream: S,
+	payload: Vec<u8>,
+	resolver: crate::resolver::RS,
+	outbound: &'static str,
+	peer_ip: IpAddr,
+) -> tokio::io::Result<()>
+where
+	S: crate::ioutils::AsyncRecvBytes + AsyncWrite + Unpin,
+{
+	let ip = if peer_ip.is_ipv4() {
+		IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+	} else {
+		IpAddr::V6(Ipv6Addr::UNSPECIFIED)
+	};
+	let opt = crate::rules::get_opt(outbound);
+	let udp = crate::udputils::udp_socket(SocketAddr::new(ip, 0), opt).await?;
+	let domain_map: Mutex<HashMap<IpAddr, String>> = Mutex::new(HashMap::new());
+
+	let (r_upbs, w_upbs) = (
+		crate::CONFIG.udp_proxy_buffer_size.0 * 1024,
+		crate::CONFIG.udp_proxy_buffer_size.1 * 1024,
+	);
+
+	let (client_r, client_w) = crate::ioutils::split(&mut stream);
+	client_w.write_all(&[0, 0]).await?;
+
+	let mut internal_buffer = DeqBuffer::new(w_upbs);
+	internal_buffer.write(&payload[19..]);
+	drop(payload);
+
+	handle_first_packet(&udp, &mut internal_buffer, &domain_map, &resolver).await?;
+
+	let mut r_buf: Vec<u8> = vec![0; r_upbs];
+
+	let mut client_r_pin = std::pin::Pin::new(client_r);
+
+	let err: tokio::io::Error;
+	loop {
+		match tokio::time::timeout(std::time::Duration::from_secs(crate::CONFIG.udp_idle_timeout), async {
+			tokio::select! {
+				res = udp.recv_from(&mut r_buf) => {
+					let (dgram_len, addr) = res?;
+					copy_u2t(&r_buf[..dgram_len], addr, client_w, &domain_map).await
+				}
+				res = crate::pipe::RecvBytes(&mut client_r_pin) => {
+					internal_buffer.write(&res?);
+					handle_xudp_packets(&udp, &mut internal_buffer, &domain_map, &resolver).await
+				}
+			}
+		})
+		.await
+		{
+			Err(_) => {
+				err = tokio::io::Error::other("Timeout");
+				break;
+			}
+			Ok(Err(e)) => {
+				err = e;
+				break;
+			}
+			_ => (),
+		}
+	}
+
+	Err(err)
+}
+
 #[inline(always)]
 pub async fn copy_u2t<W>(
 	datagram: &[u8],

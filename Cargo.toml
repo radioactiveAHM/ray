@@ -20,7 +20,7 @@ uuid = "1.19.0"
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "rt", "net", "io-util", "time", "sync"] }
 tokio-rustls = { version = "0.26.4", default-features = false, features = ["aws-lc-rs", "tls12", "brotli", "zlib"] }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.148"
+serde_json = "1.0.149"
 hickory-resolver = { version = "0.25.2", default-features = false, features = ["tokio", "https-aws-lc-rs", "h3-aws-lc-rs", "quic-aws-lc-rs", "tls-aws-lc-rs", "webpki-roots"] }
 tokio-websockets = { version = "0.13.1", features = ["server", "sha1_smol"] }
 futures-util = "0.3.31"
