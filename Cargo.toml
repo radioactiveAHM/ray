@@ -16,7 +16,7 @@ categories = [
 ]
 
 [dependencies]
-uuid = "1.19.0"
+uuid = "1.20.0"
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "rt", "net", "io-util", "time", "sync"] }
 tokio-rustls = { version = "0.26.4", default-features = false, features = ["aws-lc-rs", "tls12", "brotli", "zlib"] }
 serde = { version = "1.0.228", features = ["derive"] }
@@ -24,13 +24,13 @@ serde_json = "1.0.149"
 hickory-resolver = { version = "0.25.2", default-features = false, features = ["tokio", "https-aws-lc-rs", "h3-aws-lc-rs", "quic-aws-lc-rs", "tls-aws-lc-rs", "webpki-roots"] }
 tokio-websockets = { version = "0.13.1", features = ["server", "sha1_smol"] }
 futures-util = "0.3.31"
-bytes = "1.11.0"
-libc = "0.2.179"
+bytes = "1.11.1"
+libc = "0.2.180"
 log = "0.4.29"
 env_logger = "0.11.8"
 h2 = "0.4.13"
 http = "1.4.0"
-socket2 = "0.6.1"
+socket2 = "0.6.2"
 rand = "0.9.2"
 
 [profile.release]
