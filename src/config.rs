@@ -66,6 +66,9 @@ pub struct Xhttp {
 	pub initial_connection_window_size: Option<u32>,
 	pub initial_window_size: Option<u32>,
 
+	// stream-up/stream-one
+	pub stream_window_size_cap: usize,
+
 	// stream-up
 	pub stream_up_keepalive: Option<((u64, u64), (usize, usize))>,
 	// packet up

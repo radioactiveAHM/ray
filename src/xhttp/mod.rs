@@ -5,7 +5,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use crate::resolver::RS;
 use bytes::Bytes;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::AsyncWrite;
 
 #[inline(always)]
 fn h2_builder(c: &crate::config::Xhttp) -> h2::server::Builder {
@@ -160,6 +160,7 @@ async fn handle_h2_conn(
 								sec,
 								transport.initial_channel_size,
 								transport.recv_timeout,
+								transport.stream_window_size_cap,
 							)
 							.await;
 						} else if let Some(pu_con) = pc_lock.get(&pu_uuid).cloned() {
@@ -171,6 +172,7 @@ async fn handle_h2_conn(
 								sec,
 								transport.initial_channel_size,
 								transport.recv_timeout,
+								transport.stream_window_size_cap,
 							)
 							.await;
 						} else {
@@ -220,6 +222,7 @@ async fn handle_h2_conn(
 												outbound,
 												peer_addr,
 												transport.stream_up_keepalive,
+												transport.stream_window_size_cap,
 											)
 											.await
 											{
@@ -261,6 +264,7 @@ async fn handle_h2_conn(
 											outbound,
 											peer_addr,
 											transport.stream_up_keepalive,
+											transport.stream_window_size_cap,
 										)
 										.await
 										{
@@ -290,7 +294,9 @@ async fn handle_h2_conn(
 							return;
 						}
 
-						if let Err(e) = stream_one(stream, resolver, outbound, peer_addr).await {
+						if let Err(e) =
+							stream_one(stream, resolver, outbound, peer_addr, transport.stream_window_size_cap).await
+						{
 							log::warn!("{e}")
 						}
 					}
@@ -317,6 +323,7 @@ async fn stream_one(
 	resolver: RS,
 	outbound: &'static str,
 	peer_addr: SocketAddr,
+	stream_window_size_cap: usize,
 ) -> tokio::io::Result<()> {
 	let mut payload = Vec::with_capacity(1024 * 8);
 	stream_recv_timeout(req.body_mut(), &mut payload).await?;
@@ -343,6 +350,7 @@ async fn stream_one(
 	let mut w = resp.send_response(http_resp, false).map_err(tokio::io::Error::other)?;
 	let mut h2t = H2t {
 		stream: (req.body_mut(), &mut w),
+		cap: stream_window_size_cap * 1024,
 	};
 
 	let res = match vless.rt {
@@ -450,52 +458,38 @@ fn http_head_match(mut path: &str, headers: &http::HeaderMap, c_host: &Option<St
 // utils
 struct H2t<'a> {
 	stream: (&'a mut h2::RecvStream, &'a mut h2::SendStream<bytes::Bytes>),
+	cap: usize,
 }
 
 impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
 	#[inline(always)]
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
 		match std::task::ready!(self.stream.0.poll_data(cx)) {
-			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
-				std::io::ErrorKind::ConnectionAborted,
-				"h2 stream read closed",
-			))),
-			Some(data_res) => {
-				let data = data_res.map_err(tokio::io::Error::other)?;
-				self.stream
-					.0
-					.flow_control()
-					.release_capacity(data.len())
-					.map_err(tokio::io::Error::other)?;
-				std::task::Poll::Ready(Ok(data))
-			}
-		}
-	}
-}
-
-impl<'a> AsyncRead for H2t<'a> {
-	#[inline(always)]
-	fn poll_read(
-		mut self: std::pin::Pin<&mut Self>,
-		cx: &mut std::task::Context<'_>,
-		buf: &mut tokio::io::ReadBuf<'_>,
-	) -> std::task::Poll<std::io::Result<()>> {
-		let this = &mut *self;
-		match std::task::ready!(this.stream.0.poll_data(cx)) {
-			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
-				std::io::ErrorKind::ConnectionAborted,
-				"h2 stream read closed",
-			))),
-			Some(data_res) => {
-				let data = data_res.map_err(tokio::io::Error::other)?;
-				buf.put_slice(&data);
-				std::task::Poll::Ready(
-					this.stream
+			None => {
+				let used = self.stream.0.flow_control().used_capacity();
+				if used > 0 {
+					self.stream
 						.0
 						.flow_control()
-						.release_capacity(data.len())
-						.map_err(tokio::io::Error::other),
-				)
+						.release_capacity(used)
+						.map_err(tokio::io::Error::other)?;
+				}
+				std::task::Poll::Ready(Err(tokio::io::Error::new(
+					std::io::ErrorKind::ConnectionAborted,
+					"h2 stream read closed",
+				)))
+			}
+			Some(data_res) => {
+				let data = data_res.map_err(tokio::io::Error::other)?;
+				let used = self.stream.0.flow_control().used_capacity();
+				if used >= self.cap {
+					self.stream
+						.0
+						.flow_control()
+						.release_capacity(used)
+						.map_err(tokio::io::Error::other)?;
+				}
+				std::task::Poll::Ready(Ok(data))
 			}
 		}
 	}

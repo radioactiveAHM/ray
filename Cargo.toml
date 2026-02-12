@@ -1,6 +1,6 @@
 [package]
 name = "ray"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "Asynchronous VLESS server protocol implemented in Rust"
@@ -25,13 +25,13 @@ hickory-resolver = { version = "0.25.2", default-features = false, features = ["
 tokio-websockets = { version = "0.13.1", features = ["server", "sha1_smol"] }
 futures-util = "0.3.31"
 bytes = "1.11.1"
-libc = "0.2.180"
+libc = "0.2.181"
 log = "0.4.29"
-env_logger = "0.11.8"
+env_logger = "0.11.9"
 h2 = "0.4.13"
 http = "1.4.0"
 socket2 = "0.6.2"
-rand = "0.9.2"
+rand = "0.10.0"
 
 [profile.release]
 panic = "abort"

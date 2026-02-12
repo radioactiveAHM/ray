@@ -354,6 +354,24 @@ where
 				break;
 			}
 		}
+	} else {
+		loop {
+			match tokio::time::timeout(
+				std::time::Duration::from_secs(3),
+				pipe::Read(&mut client_r_pin, &mut client_buf_rb),
+			)
+			.await
+			{
+				Ok(Err(_)) | Err(_) => break,
+				_ => (),
+			};
+			if target_w.write_all(client_buf_rb.filled()).await.is_err() {
+				break;
+			}
+			if target_w.flush().await.is_err() {
+				break;
+			}
+		}
 	}
 
 	let _ = target_w.shutdown().await;
@@ -458,6 +476,21 @@ where
 				break;
 			}
 			if client_w.flush().await.is_err() {
+				break;
+			}
+		}
+	} else {
+		loop {
+			let data = match tokio::time::timeout(std::time::Duration::from_secs(3), pipe::RecvBytes(&mut client_r_pin))
+				.await
+			{
+				Ok(Err(_)) | Err(_) => break,
+				Ok(Ok(data)) => data,
+			};
+			if target_w.write_all(&data).await.is_err() {
+				break;
+			}
+			if target_w.flush().await.is_err() {
 				break;
 			}
 		}

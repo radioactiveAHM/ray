@@ -1,5 +1,3 @@
-use rand::Rng;
-
 #[inline(always)]
 pub async fn stream_up(
 	mut r_stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
@@ -8,6 +6,7 @@ pub async fn stream_up(
 	outbound: &'static str,
 	peer_addr: std::net::SocketAddr,
 	stream_up_keepalive: Option<((u64, u64), (usize, usize))>,
+	stream_window_size_cap: usize,
 ) -> tokio::io::Result<()> {
 	let mut payload = Vec::with_capacity(1024 * 8);
 	super::stream_recv_timeout(w_stream.0.body_mut(), &mut payload).await?;
@@ -53,10 +52,10 @@ pub async fn stream_up(
 			Some(tokio::spawn(async move {
 				let mut random_data = vec![0; sz.1];
 				loop {
-					let sleep_dur: u64 = rand::rng().random_range(dur.0..dur.1);
+					let sleep_dur: u64 = rand::random_range(dur.0..dur.1);
 					tokio::time::sleep(std::time::Duration::from_secs(sleep_dur)).await;
-					let random_data_to_send: usize = rand::rng().random_range(sz.0..sz.1);
-					rand::rng().fill(&mut random_data[..random_data_to_send]);
+					let random_data_to_send: usize = rand::random_range(sz.0..sz.1);
+					rand::fill(&mut random_data[..random_data_to_send]);
 
 					ss.reserve_capacity(random_data_to_send);
 					match std::future::poll_fn(|cx| ss.poll_capacity(cx)).await {
@@ -84,6 +83,7 @@ pub async fn stream_up(
 
 	let mut h2t = super::H2t {
 		stream: (w_stream.0.body_mut(), &mut w),
+		cap: stream_window_size_cap * 1024,
 	};
 
 	let res = match vless.rt {

@@ -8,9 +8,7 @@
 - [x] HTTP
 - [x] HTTP Upgrade
 - [x] WS (WebSocket)
-- [x] XHTTP H2 stream-one (stable)
-- [x] XHTTP H2 stream-up (stable)
-- [x] XHTTP H2 packet-up (might be unstable)
+- [x] XHTTP H2 stream-one, stream-up, packet-up
 
 ## Vless Request Commands
 
@@ -146,6 +144,8 @@ XHTTP
             "max_send_buffer_size": 1024, // Sets the maximum send buffer size per stream. Unit is Kb.
             "initial_connection_window_size": 16384, // Indicates the initial window size (in octets) for connection-level flow control for received data. Unit is Kb.
             "initial_window_size": 1024, // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.
+            // stream-up/stream-one/packet-up
+            "stream_window_size_cap": 512, // suggested (initial_window_size/2)
             // stream-up
             "stream_up_keepalive": [[60, 90], [10, 128]], //up-stream data link keep-alive. [duration(sec)[min-max], bytes[min, max]]. set null to disable.
             // packet-up

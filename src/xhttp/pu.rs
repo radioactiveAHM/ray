@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::AsyncWrite;
 
 #[inline(always)]
 pub async fn recv_bytes_buffered(
@@ -8,9 +8,14 @@ pub async fn recv_bytes_buffered(
 	bytes_vec: &mut Vec<bytes::Bytes>,
 	content_len: usize,
 	recv_timeout: u64,
+	cap: usize,
 ) -> Option<()> {
 	let mut recved = 0;
 	loop {
+		let used = stream_recver.flow_control().used_capacity();
+		if used >= cap {
+			let _ = stream_recver.flow_control().release_capacity(used);
+		}
 		if recved >= content_len {
 			break;
 		}
@@ -19,7 +24,6 @@ pub async fn recv_bytes_buffered(
 			Ok(None) => break,
 			Ok(Some(Ok(data))) => {
 				recved += data.len();
-				let _ = stream_recver.flow_control().release_capacity(data.len());
 				bytes_vec.push(data);
 			}
 		}
@@ -35,15 +39,21 @@ pub async fn write_to_channel(
 	sec: usize,
 	initial_channel_size: usize,
 	recv_timeout: u64,
+	stream_window_size_cap: usize,
 ) {
-	let recver = stream.0.body_mut();
 	let sender = &pu.sender;
 	let mut buffed_bytes = Vec::with_capacity(initial_channel_size);
 
 	// buffer data
-	if recv_bytes_buffered(recver, &mut buffed_bytes, content_len, recv_timeout)
-		.await
-		.is_none()
+	if recv_bytes_buffered(
+		stream.0.body_mut(),
+		&mut buffed_bytes,
+		content_len,
+		recv_timeout,
+		stream_window_size_cap * 1024,
+	)
+	.await
+	.is_none()
 	{
 		// data incomplete
 		pu.closed.store(true, std::sync::atomic::Ordering::Release);
@@ -59,6 +69,7 @@ pub async fn write_to_channel(
 			.unwrap(),
 		true,
 	);
+	drop(stream);
 
 	// wait for sec matching
 	loop {
@@ -185,21 +196,6 @@ impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
 			))),
 			Some(data) => std::task::Poll::Ready(Ok(data)),
 		}
-	}
-}
-
-impl<'a> AsyncRead for H2t<'a> {
-	#[inline(always)]
-	fn poll_read(
-		mut self: std::pin::Pin<&mut Self>,
-		cx: &mut std::task::Context<'_>,
-		buf: &mut tokio::io::ReadBuf<'_>,
-	) -> std::task::Poll<std::io::Result<()>> {
-		let this = &mut *self;
-		buf.put_slice(
-			&std::task::ready!(this.stream.0.poll_recv(cx)).ok_or(tokio::io::Error::other("recv channel closed"))?,
-		);
-		std::task::Poll::Ready(Ok(()))
 	}
 }
 
