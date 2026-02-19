@@ -24,6 +24,7 @@ fn h2_builder(c: &crate::config::Xhttp) -> h2::server::Builder {
 	h2_builder
 }
 
+#[inline(always)]
 pub async fn xhttp_server(
 	resolver: RS,
 	tcp: tokio::net::TcpListener,
@@ -64,6 +65,7 @@ pub async fn xhttp_server(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 async fn handle_h2_conn(
 	transport: &'static crate::config::Xhttp,
 	tls: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,

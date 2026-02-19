@@ -103,43 +103,6 @@ where
 	}
 }
 
-impl<S> AsyncRead for Wst<S>
-where
-	S: AsyncRead + AsyncWrite + Unpin,
-{
-	#[inline(always)]
-	fn poll_read(
-		mut self: std::pin::Pin<&mut Self>,
-		cx: &mut std::task::Context<'_>,
-		buf: &mut tokio::io::ReadBuf<'_>,
-	) -> std::task::Poll<std::io::Result<()>> {
-		if self.closed {
-			return std::task::Poll::Ready(Err(crate::verror::VError::WsClosed.into()));
-		}
-		match self.ws.poll_next_unpin(cx) {
-			std::task::Poll::Pending => std::task::Poll::Pending,
-			std::task::Poll::Ready(None) => std::task::Poll::Ready(Err(crate::verror::VError::WsClosed.into())),
-			std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
-			std::task::Poll::Ready(Some(Ok(message))) => {
-				if message.is_ping() {
-					let _ = self.ws.start_send_unpin(tokio_websockets::Message::pong(Vec::new()));
-					std::task::Poll::Pending
-				} else {
-					if message.is_close() {
-						self.closed = true;
-					}
-					if !message.as_payload().is_empty() {
-						buf.put_slice(message.as_payload());
-						std::task::Poll::Ready(Ok(()))
-					} else {
-						std::task::Poll::Pending
-					}
-				}
-			}
-		}
-	}
-}
-
 impl<S> AsyncWrite for Wst<S>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
