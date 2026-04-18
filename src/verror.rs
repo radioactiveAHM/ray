@@ -14,7 +14,7 @@ pub enum VError {
 	MuxCloseConnection,
 	MuxBufferOverflow,
 	NoHost,
-	ResolveDnsFailed(hickory_resolver::ResolveError),
+	ResolveDnsFailed,
 	BufferOverflow,
 	UdpDeadLoop,
 	MailFormedUdpPacket,
@@ -38,7 +38,7 @@ impl Display for VError {
 			VError::UdpDeadLoop => write!(f, "UdpDeadLoop"),
 			VError::MailFormedUdpPacket => write!(f, "MailFormedUdpPacket"),
 			VError::NoHost => write!(f, "NoHost"),
-			VError::ResolveDnsFailed(e) => write!(f, "ResolveDnsFailed: {e}"),
+			VError::ResolveDnsFailed => write!(f, "ResolveDnsFailed"),
 			VError::BufferOverflow => write!(f, "BufferOverflow"),
 			VError::WsClosed => write!(f, "WS Close Frame Received"),
 		}

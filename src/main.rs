@@ -282,10 +282,11 @@ where
 	let mut client_r_pin = std::pin::Pin::new(client_r);
 	let mut target_r_pin = std::pin::Pin::new(target_r);
 
+	let tcp_idle_timeout = std::time::Duration::from_secs(CONFIG.tcp_idle_timeout);
 	let mut up_stream_closed = false;
 	let err: tokio::io::Error;
 	loop {
-		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.tcp_idle_timeout), async {
+		match tokio::time::timeout(tcp_idle_timeout, async {
 			if opt.tcp_read_buffered {
 				tokio::select! {
 					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
@@ -336,14 +337,10 @@ where
 		}
 	}
 
+	let tcp_idle_timeout = std::time::Duration::from_secs(3);
 	if up_stream_closed {
 		loop {
-			match tokio::time::timeout(
-				std::time::Duration::from_secs(3),
-				pipe::Read(&mut target_r_pin, &mut target_buf_rb),
-			)
-			.await
-			{
+			match tokio::time::timeout(tcp_idle_timeout, pipe::Read(&mut target_r_pin, &mut target_buf_rb)).await {
 				Ok(Err(_)) | Err(_) => break,
 				_ => (),
 			};
@@ -356,12 +353,7 @@ where
 		}
 	} else {
 		loop {
-			match tokio::time::timeout(
-				std::time::Duration::from_secs(3),
-				pipe::Read(&mut client_r_pin, &mut client_buf_rb),
-			)
-			.await
-			{
+			match tokio::time::timeout(tcp_idle_timeout, pipe::Read(&mut client_r_pin, &mut client_buf_rb)).await {
 				Ok(Err(_)) | Err(_) => break,
 				_ => (),
 			};
@@ -409,10 +401,11 @@ where
 	let mut client_r_pin = std::pin::Pin::new(client_r);
 	let mut target_r_pin = std::pin::Pin::new(target_r);
 
+	let tcp_idle_timeout = std::time::Duration::from_secs(CONFIG.tcp_idle_timeout);
 	let mut up_stream_closed = false;
 	let err: tokio::io::Error;
 	loop {
-		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.tcp_idle_timeout), async {
+		match tokio::time::timeout(tcp_idle_timeout, async {
 			if opt.tcp_read_buffered {
 				tokio::select! {
 					read = pipe::RecvBytes(&mut client_r_pin) => {
@@ -461,14 +454,10 @@ where
 		}
 	}
 
+	let tcp_idle_timeout = std::time::Duration::from_secs(3);
 	if up_stream_closed {
 		loop {
-			match tokio::time::timeout(
-				std::time::Duration::from_secs(3),
-				pipe::Read(&mut target_r_pin, &mut target_buf_rb),
-			)
-			.await
-			{
+			match tokio::time::timeout(tcp_idle_timeout, pipe::Read(&mut target_r_pin, &mut target_buf_rb)).await {
 				Ok(Err(_)) | Err(_) => break,
 				_ => (),
 			};
@@ -481,9 +470,7 @@ where
 		}
 	} else {
 		loop {
-			let data = match tokio::time::timeout(std::time::Duration::from_secs(3), pipe::RecvBytes(&mut client_r_pin))
-				.await
-			{
+			let data = match tokio::time::timeout(tcp_idle_timeout, pipe::RecvBytes(&mut client_r_pin)).await {
 				Ok(Err(_)) | Err(_) => break,
 				Ok(Ok(data)) => data,
 			};
@@ -543,10 +530,11 @@ where
 
 	client_w.write_all(&[0, 0]).await?;
 
+	let udp_idle_timeout = std::time::Duration::from_secs(CONFIG.udp_idle_timeout);
 	let mut up_stream_closed = false;
 	let err: tokio::io::Error;
 	loop {
-		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.udp_idle_timeout), async {
+		match tokio::time::timeout(udp_idle_timeout, async {
 			tokio::select! {
 				read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
 					if read.is_err() {
@@ -578,9 +566,10 @@ where
 		}
 	}
 
+	let udp_idle_timeout = std::time::Duration::from_secs(3);
 	if up_stream_closed {
 		loop {
-			match tokio::time::timeout(std::time::Duration::from_secs(3), udp.recv(&mut udp_buf[2..])).await {
+			match tokio::time::timeout(udp_idle_timeout, udp.recv(&mut udp_buf[2..])).await {
 				Ok(Err(_)) | Err(_) => break,
 				Ok(Ok(size)) => {
 					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));
@@ -639,10 +628,11 @@ where
 
 	client_w.write_all(&[0, 0]).await?;
 
+	let udp_idle_timeout = std::time::Duration::from_secs(CONFIG.udp_idle_timeout);
 	let mut up_stream_closed = false;
 	let err: tokio::io::Error;
 	loop {
-		match tokio::time::timeout(std::time::Duration::from_secs(CONFIG.udp_idle_timeout), async {
+		match tokio::time::timeout(udp_idle_timeout, async {
 			tokio::select! {
 				read = pipe::RecvBytes(&mut client_r_pin) => {
 					if read.is_err() {
@@ -673,9 +663,10 @@ where
 		}
 	}
 
+	let udp_idle_timeout = std::time::Duration::from_secs(3);
 	if up_stream_closed {
 		loop {
-			match tokio::time::timeout(std::time::Duration::from_secs(3), udp.recv(&mut udp_buf[2..])).await {
+			match tokio::time::timeout(udp_idle_timeout, udp.recv(&mut udp_buf[2..])).await {
 				Ok(Err(_)) | Err(_) => break,
 				Ok(Ok(size)) => {
 					udp_buf[..2].copy_from_slice(&utils::convert_u16_to_two_u8s_be(size as u16));

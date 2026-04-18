@@ -10,14 +10,13 @@ where
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		let this = &mut *self;
 		this.1.clear();
-		let poll = std::task::ready!(this.0.as_mut().poll_read(cx, this.1)).map(|_| {
+		std::task::ready!(this.0.as_mut().poll_read(cx, this.1)).map(|_| {
 			if this.1.filled().is_empty() {
 				std::task::Poll::Ready(Err(tokio::io::Error::other("Pipe read EOF")))
 			} else {
 				std::task::Poll::Ready(Ok(()))
 			}
-		});
-		poll?
+		})?
 	}
 }
 

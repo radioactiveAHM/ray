@@ -1,12 +1,10 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use hickory_resolver::{Resolver, config::NameServerConfigGroup, name_server::TokioConnectionProvider};
+use hickory_resolver::{Resolver, config::NameServerConfig, net::runtime::TokioRuntimeProvider};
 
 use crate::verror::VError;
 
-pub type RS = Arc<
-	Resolver<hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>>,
->;
+pub type RS = Arc<Resolver<TokioRuntimeProvider>>;
 
 pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
 	let protocol = if let Some(addr) = &rc.resolver {
@@ -15,38 +13,18 @@ pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
 			&& let Some(domain) = parts.next()
 		{
 			match scheme {
-				"https" => NameServerConfigGroup::from_ips_https(
-					&rc.ips,
-					rc.port,
-					domain.to_string(),
-					rc.trust_negative_responses,
-				),
-				"h3" => NameServerConfigGroup::from_ips_h3(
-					&rc.ips,
-					rc.port,
-					domain.to_string(),
-					rc.trust_negative_responses,
-				),
-				"quic" => NameServerConfigGroup::from_ips_quic(
-					&rc.ips,
-					rc.port,
-					domain.to_string(),
-					rc.trust_negative_responses,
-				),
-				"tls" => NameServerConfigGroup::from_ips_tls(
-					&rc.ips,
-					rc.port,
-					domain.to_string(),
-					rc.trust_negative_responses,
-				),
-				"udp" => NameServerConfigGroup::from_ips_clear(&rc.ips, rc.port, rc.trust_negative_responses),
+				"https" => NameServerConfig::https(rc.ip, domain.into(), None),
+				"h3" => NameServerConfig::h3(rc.ip, domain.into(), None),
+				"quic" => NameServerConfig::quic(rc.ip, domain.into()),
+				"tls" => NameServerConfig::tls(rc.ip, domain.into()),
+				"udp" => NameServerConfig::udp(rc.ip),
 				_ => panic!("Dns protocol not supported"),
 			}
 		} else {
 			panic!("invalid resolver configuration")
 		}
 	} else {
-		NameServerConfigGroup::from_ips_clear(&rc.ips, rc.port, rc.trust_negative_responses)
+		NameServerConfig::udp(rc.ip)
 	};
 
 	let mut options = hickory_resolver::config::ResolverOpts::default();
@@ -56,23 +34,18 @@ pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
 	options.num_concurrent_reqs = rc.num_concurrent_reqs;
 
 	Arc::new(
-		Resolver::builder_with_config(
-			hickory_resolver::config::ResolverConfig::from_parts(None, Vec::new(), protocol),
-			TokioConnectionProvider::default(),
+		hickory_resolver::TokioResolver::builder_with_config(
+			hickory_resolver::config::ResolverConfig::from_parts(None, Vec::new(), vec![protocol]),
+			TokioRuntimeProvider::default(),
 		)
 		.with_options(options)
-		.build(),
+		.build()
+		.unwrap(),
 	)
 }
 
 #[inline(always)]
-pub async fn resolve(
-	resolver: &Resolver<
-		hickory_resolver::name_server::GenericConnector<hickory_resolver::proto::runtime::TokioRuntimeProvider>,
-	>,
-	domain: &str,
-	port: u16,
-) -> Result<SocketAddr, VError> {
+pub async fn resolve(resolver: &Resolver<TokioRuntimeProvider>, domain: &str, port: u16) -> Result<SocketAddr, VError> {
 	match resolver.lookup_ip(domain).await {
 		Ok(lookup) => {
 			if let Some(ip) = lookup.iter().next() {
@@ -81,6 +54,6 @@ pub async fn resolve(
 				Err(VError::NoHost)
 			}
 		}
-		Err(e) => Err(VError::ResolveDnsFailed(e)),
+		Err(_) => Err(VError::ResolveDnsFailed),
 	}
 }

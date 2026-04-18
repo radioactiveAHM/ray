@@ -137,11 +137,9 @@ impl ResolvingMode {
 #[derive(serde::Deserialize, Clone)]
 pub struct Resolver {
 	pub resolver: Option<String>,
-	pub ips: Vec<std::net::IpAddr>,
-	pub port: u16,
-	pub trust_negative_responses: bool,
+	pub ip: std::net::IpAddr,
 	pub ip_strategy: ResolvingMode,
-	pub cache_size: usize,
+	pub cache_size: u64,
 	pub timeout: u64,
 	pub num_concurrent_reqs: usize,
 }
