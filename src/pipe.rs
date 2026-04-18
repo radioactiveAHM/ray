@@ -12,7 +12,7 @@ where
 		this.1.clear();
 		std::task::ready!(this.0.as_mut().poll_read(cx, this.1)).map(|_| {
 			if this.1.filled().is_empty() {
-				std::task::Poll::Ready(Err(tokio::io::Error::other("Pipe read EOF")))
+				std::task::Poll::Ready(Err(tokio::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof")))
 			} else {
 				std::task::Poll::Ready(Ok(()))
 			}
@@ -30,7 +30,7 @@ where
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		let poll = std::task::ready!(self.0.as_mut().poll_recv_bytes(cx).map_ok(|b| {
 			if b.is_empty() {
-				std::task::Poll::Ready(Err(tokio::io::Error::other("Pipe read EOF")))
+				std::task::Poll::Ready(Err(tokio::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof")))
 			} else {
 				std::task::Poll::Ready(Ok(b))
 			}
@@ -62,7 +62,7 @@ where
 				std::task::Poll::Ready(Ok(_)) => {
 					let sz = this.1.filled().len();
 					if filled == sz {
-						return std::task::Poll::Ready(Err(tokio::io::Error::other("Pipe read EOF")));
+						return std::task::Poll::Ready(Err(tokio::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof")));
 					} else if this.1.remaining() == 0 {
 						return std::task::Poll::Ready(Ok(()));
 					}

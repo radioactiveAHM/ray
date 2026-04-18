@@ -284,7 +284,7 @@ where
 
 	let tcp_idle_timeout = std::time::Duration::from_secs(CONFIG.tcp_idle_timeout);
 	let mut up_stream_closed = false;
-	let err: tokio::io::Error;
+	let res: tokio::io::Result<()>;
 	loop {
 		match tokio::time::timeout(tcp_idle_timeout, async {
 			if opt.tcp_read_buffered {
@@ -326,11 +326,15 @@ where
 		.await
 		{
 			Err(_) => {
-				err = tokio::io::Error::other("Timeout");
+				res = Err(tokio::io::Error::other("idle timeout"));
 				break;
 			}
 			Ok(Err(e)) => {
-				err = e;
+				if e.kind() == tokio::io::ErrorKind::UnexpectedEof {
+					res = Ok(())
+				} else {
+					res = Err(e)
+				}
 				break;
 			}
 			_ => (),
@@ -367,7 +371,7 @@ where
 	}
 
 	let _ = target_w.shutdown().await;
-	Err(err)
+	res
 }
 
 async fn handle_tcp_bytes<S>(
@@ -403,7 +407,7 @@ where
 
 	let tcp_idle_timeout = std::time::Duration::from_secs(CONFIG.tcp_idle_timeout);
 	let mut up_stream_closed = false;
-	let err: tokio::io::Error;
+	let res: tokio::io::Result<()>;
 	loop {
 		match tokio::time::timeout(tcp_idle_timeout, async {
 			if opt.tcp_read_buffered {
@@ -443,11 +447,15 @@ where
 		.await
 		{
 			Err(_) => {
-				err = tokio::io::Error::other("Timeout");
+				res = Err(tokio::io::Error::other("idle timeout"));
 				break;
 			}
 			Ok(Err(e)) => {
-				err = e;
+				if e.kind() == tokio::io::ErrorKind::UnexpectedEof {
+					res = Ok(())
+				} else {
+					res = Err(e)
+				}
 				break;
 			}
 			_ => (),
@@ -484,7 +492,7 @@ where
 	}
 
 	let _ = target_w.shutdown().await;
-	Err(err)
+	res
 }
 
 async fn handle_udp<S>(
@@ -532,7 +540,7 @@ where
 
 	let udp_idle_timeout = std::time::Duration::from_secs(CONFIG.udp_idle_timeout);
 	let mut up_stream_closed = false;
-	let err: tokio::io::Error;
+	let res: tokio::io::Result<()>;
 	loop {
 		match tokio::time::timeout(udp_idle_timeout, async {
 			tokio::select! {
@@ -555,11 +563,15 @@ where
 		.await
 		{
 			Err(_) => {
-				err = tokio::io::Error::other("Timeout");
+				res = Err(tokio::io::Error::other("idle timeout"));
 				break;
 			}
 			Ok(Err(e)) => {
-				err = e;
+				if e.kind() == tokio::io::ErrorKind::UnexpectedEof {
+					res = Ok(())
+				} else {
+					res = Err(e)
+				}
 				break;
 			}
 			_ => (),
@@ -584,7 +596,7 @@ where
 		}
 	}
 
-	Err(err)
+	res
 }
 
 async fn handle_udp_bytes<S>(
@@ -630,7 +642,7 @@ where
 
 	let udp_idle_timeout = std::time::Duration::from_secs(CONFIG.udp_idle_timeout);
 	let mut up_stream_closed = false;
-	let err: tokio::io::Error;
+	let res: tokio::io::Result<()>;
 	loop {
 		match tokio::time::timeout(udp_idle_timeout, async {
 			tokio::select! {
@@ -652,11 +664,15 @@ where
 		.await
 		{
 			Err(_) => {
-				err = tokio::io::Error::other("Timeout");
+				res = Err(tokio::io::Error::other("idle timeout"));
 				break;
 			}
 			Ok(Err(e)) => {
-				err = e;
+				if e.kind() == tokio::io::ErrorKind::UnexpectedEof {
+					res = Ok(())
+				} else {
+					res = Err(e)
+				}
 				break;
 			}
 			_ => (),
@@ -681,5 +697,5 @@ where
 		}
 	}
 
-	Err(err)
+	res
 }
