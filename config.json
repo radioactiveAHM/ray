@@ -54,10 +54,14 @@
 		}
 	},
 	"resolver": {
-		"resolver": null,
-		"ip": "1.1.1.1",
+		"servers": [
+			{
+				"proto": null,
+				"ip": "1.1.1.1"
+			}
+		],
 		"ip_strategy": "Ipv4thenIpv6",
-		"cache_size": 64,
+		"cache_size": 1024,
 		"timeout": 2,
 		"num_concurrent_reqs": 8
 	},

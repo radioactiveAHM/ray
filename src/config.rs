@@ -135,9 +135,14 @@ impl ResolvingMode {
 }
 
 #[derive(serde::Deserialize, Clone)]
-pub struct Resolver {
-	pub resolver: Option<String>,
+pub struct ResolverServers {
+	pub proto: Option<String>,
 	pub ip: std::net::IpAddr,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct Resolver {
+	pub servers: Vec<ResolverServers>,
 	pub ip_strategy: ResolvingMode,
 	pub cache_size: u64,
 	pub timeout: u64,

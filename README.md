@@ -76,12 +76,14 @@
         }
     },
     "resolver": { // Built-in domain resolver supporting multiple protocols: udp, https, h3, tls, and quic
-        "resolver": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google", "quic://dns.google"
-        "ips": ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
-        "port": 53,
-        "trust_negative_responses": true,
+        "servers": [
+            {
+                "proto": null, // 'null' or "udp://example" defaults to UDP; for other protocols, use: "https://dns.google", "h3://dns.google", "tls://dns.google", "quic://dns.google"
+                "ip": "8.8.8.8"
+            }
+        ],
         "ip_strategy": "Ipv4thenIpv6", // Options: Ipv4Only, Ipv6Only, Ipv4AndIpv6, Ipv6thenIpv4, Ipv4thenIpv6,
-        "cache_size": 64, // Cache size is in number of records
+        "cache_size": 1024, // Cache size is in number of records
         "timeout": 2, // Specify the timeout for a request.
         "num_concurrent_reqs": 8 // Number of concurrent requests per query. Where more than one nameserver is configured, this configures the resolver to send queries to a number of servers in parallel. Defaults to 2; 0 or 1 will execute requests serially.
     },

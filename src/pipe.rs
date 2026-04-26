@@ -62,7 +62,10 @@ where
 				std::task::Poll::Ready(Ok(_)) => {
 					let sz = this.1.filled().len();
 					if filled == sz {
-						return std::task::Poll::Ready(Err(tokio::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof")));
+						return std::task::Poll::Ready(Err(tokio::io::Error::new(
+							std::io::ErrorKind::UnexpectedEof,
+							"eof",
+						)));
 					} else if this.1.remaining() == 0 {
 						return std::task::Poll::Ready(Ok(()));
 					}

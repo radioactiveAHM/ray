@@ -7,25 +7,31 @@ use crate::verror::VError;
 pub type RS = Arc<Resolver<TokioRuntimeProvider>>;
 
 pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
-	let protocol = if let Some(addr) = &rc.resolver {
-		let mut parts = addr.split("://");
-		if let Some(scheme) = parts.next()
-			&& let Some(domain) = parts.next()
-		{
-			match scheme {
-				"https" => NameServerConfig::https(rc.ip, domain.into(), None),
-				"h3" => NameServerConfig::h3(rc.ip, domain.into(), None),
-				"quic" => NameServerConfig::quic(rc.ip, domain.into()),
-				"tls" => NameServerConfig::tls(rc.ip, domain.into()),
-				"udp" => NameServerConfig::udp(rc.ip),
-				_ => panic!("Dns protocol not supported"),
+	let servers = rc
+		.servers
+		.iter()
+		.map(|server| {
+			if let Some(addr) = &server.proto {
+				let mut parts = addr.split("://");
+				if let Some(scheme) = parts.next()
+					&& let Some(domain) = parts.next()
+				{
+					match scheme {
+						"https" => NameServerConfig::https(server.ip, domain.into(), None),
+						"h3" => NameServerConfig::h3(server.ip, domain.into(), None),
+						"quic" => NameServerConfig::quic(server.ip, domain.into()),
+						"tls" => NameServerConfig::tls(server.ip, domain.into()),
+						"udp" => NameServerConfig::udp(server.ip),
+						_ => panic!("Dns protocol not supported"),
+					}
+				} else {
+					panic!("invalid resolver configuration")
+				}
+			} else {
+				NameServerConfig::udp(server.ip)
 			}
-		} else {
-			panic!("invalid resolver configuration")
-		}
-	} else {
-		NameServerConfig::udp(rc.ip)
-	};
+		})
+		.collect();
 
 	let mut options = hickory_resolver::config::ResolverOpts::default();
 	options.cache_size = rc.cache_size;
@@ -35,7 +41,7 @@ pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
 
 	Arc::new(
 		hickory_resolver::TokioResolver::builder_with_config(
-			hickory_resolver::config::ResolverConfig::from_parts(None, Vec::new(), vec![protocol]),
+			hickory_resolver::config::ResolverConfig::from_parts(None, Vec::new(), servers),
 			TokioRuntimeProvider::default(),
 		)
 		.with_options(options)
