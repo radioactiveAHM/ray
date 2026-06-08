@@ -10,7 +10,6 @@ pub struct Tc {
 	pub stream: (tokio::net::TcpStream, std::net::SocketAddr),
 }
 impl Tc {
-	#[inline(always)]
 	pub fn new(
 		acceptor: TlsAcceptor,
 		stream: Result<(tokio::net::TcpStream, std::net::SocketAddr), tokio::io::Error>,
@@ -21,7 +20,6 @@ impl Tc {
 		})
 	}
 
-	#[inline(always)]
 	pub async fn accept(self) -> Result<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, tokio::io::Error> {
 		self.acceptor.accept(self.stream.0).await.map(|mut tls| {
 			tls.get_mut()

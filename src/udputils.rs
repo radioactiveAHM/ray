@@ -4,7 +4,6 @@ pub struct UdpWriter<'a> {
 	pub b: utils::DeqBuffer,
 }
 impl<'a> UdpWriter<'a> {
-	#[inline(always)]
 	pub async fn send_packets(&mut self, buf: &[u8]) -> tokio::io::Result<()> {
 		if buf.is_empty() {
 			return Ok(());
@@ -45,7 +44,6 @@ impl<'a> UdpWriter<'a> {
 	}
 }
 
-#[inline(always)]
 pub async fn udp_socket(
 	serve_addrs: std::net::SocketAddr,
 	_sockopt: &crate::config::Opt,
@@ -80,7 +78,7 @@ pub async fn udp_socket(
 }
 
 #[cfg(target_os = "linux")]
-#[inline(always)]
+
 pub fn set_udp_bind_device(socket: &socket2::Socket, device: &str) -> Result<(), ()> {
 	if let Ok(device) = std::ffi::CString::new(device) {
 		let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);

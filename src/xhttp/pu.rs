@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use tokio::io::AsyncWrite;
 
-#[inline(always)]
 pub async fn recv_bytes_buffered(
 	stream_recver: &mut h2::RecvStream,
 	bytes_vec: &mut Vec<bytes::Bytes>,
@@ -31,7 +30,6 @@ pub async fn recv_bytes_buffered(
 	Some(())
 }
 
-#[inline(always)]
 pub async fn write_to_channel(
 	mut stream: (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	pu: Arc<super::Pu>,
@@ -98,8 +96,6 @@ pub async fn write_to_channel(
 	pu.notify.notify_waiters();
 }
 
-#[allow(clippy::too_many_arguments)]
-#[inline(always)]
 pub async fn packet_up(
 	id: uuid::Uuid,
 	pc: super::PuConns,
@@ -187,7 +183,6 @@ struct H2t<'a> {
 }
 
 impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
-	#[inline(always)]
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
 		match std::task::ready!(self.stream.0.poll_recv(cx)) {
 			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
@@ -200,7 +195,6 @@ impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
 }
 
 impl<'a> AsyncWrite for H2t<'a> {
-	#[inline(always)]
 	fn poll_write(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
@@ -234,7 +228,6 @@ impl<'a> AsyncWrite for H2t<'a> {
 		}
 	}
 
-	#[inline(always)]
 	fn poll_flush(
 		self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,
@@ -242,7 +235,6 @@ impl<'a> AsyncWrite for H2t<'a> {
 		std::task::Poll::Ready(Ok(()))
 	}
 
-	#[inline(always)]
 	fn poll_shutdown(
 		self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,

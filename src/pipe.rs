@@ -6,7 +6,7 @@ where
 	R: AsyncRead + Unpin,
 {
 	type Output = tokio::io::Result<()>;
-	#[inline(always)]
+
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		let this = &mut *self;
 		this.1.clear();
@@ -26,7 +26,7 @@ where
 	R: crate::ioutils::AsyncRecvBytes + Unpin,
 {
 	type Output = tokio::io::Result<bytes::Bytes>;
-	#[inline(always)]
+
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		let poll = std::task::ready!(self.0.as_mut().poll_recv_bytes(cx).map_ok(|b| {
 			if b.is_empty() {
@@ -45,7 +45,7 @@ where
 	R: AsyncRead + Unpin,
 {
 	type Output = tokio::io::Result<()>;
-	#[inline(always)]
+
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		let this = &mut *self;
 		this.1.clear();

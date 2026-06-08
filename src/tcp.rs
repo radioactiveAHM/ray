@@ -2,7 +2,6 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use tokio::net::{TcpSocket, TcpStream};
 
-#[inline(always)]
 pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::Opt) -> tokio::io::Result<TcpSocket> {
 	let socket: TcpSocket = if a.is_ipv4() {
 		tokio::net::TcpSocket::new_v4()?
@@ -49,7 +48,6 @@ pub fn tcpsocket(a: SocketAddr, sockopt: &crate::config::Opt) -> tokio::io::Resu
 	Ok(socket)
 }
 
-#[inline(always)]
 pub async fn stream(a: SocketAddr, sockopt: &crate::config::Opt) -> tokio::io::Result<TcpStream> {
 	let ip = if a.is_ipv4() {
 		IpAddr::V4(Ipv4Addr::UNSPECIFIED)
@@ -62,7 +60,7 @@ pub async fn stream(a: SocketAddr, sockopt: &crate::config::Opt) -> tokio::io::R
 
 #[cfg(target_os = "linux")]
 pub mod tcp_options {
-	#[inline(always)]
+
 	pub fn set_tcp_mss(socket: &tokio::net::TcpSocket, mss: i32) -> Result<(), ()> {
 		let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
 
@@ -80,7 +78,7 @@ pub mod tcp_options {
 		}
 		Ok(())
 	}
-	#[inline(always)]
+
 	pub fn set_tcp_congestion(socket: &tokio::net::TcpSocket, congestion: &str) -> Result<(), ()> {
 		if let Ok(c) = std::ffi::CString::new(congestion) {
 			let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
@@ -102,7 +100,7 @@ pub mod tcp_options {
 			Err(())
 		}
 	}
-	#[inline(always)]
+
 	pub fn set_tcp_bind_device(socket: &tokio::net::TcpSocket, device: &str) -> Result<(), ()> {
 		if let Ok(device) = std::ffi::CString::new(device) {
 			let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);

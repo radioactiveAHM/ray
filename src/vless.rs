@@ -4,7 +4,6 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use crate::utils::convert_two_u8s_to_u16_be;
 use crate::verror::VError;
 
-#[inline(always)]
 const fn parse_socket(s: u8) -> Result<RequestCommand, VError> {
 	if s == 1 {
 		Ok(RequestCommand::TCP)
@@ -17,7 +16,6 @@ const fn parse_socket(s: u8) -> Result<RequestCommand, VError> {
 	}
 }
 
-#[inline(always)]
 pub async fn parse_target(
 	buff: &[u8],
 	resolver: &crate::resolver::RS,
@@ -105,7 +103,6 @@ pub struct Vless {
 }
 
 impl Vless {
-	#[inline(always)]
 	pub async fn new(buff: &[u8], resolver: &crate::resolver::RS) -> Result<Self, VError> {
 		if buff.is_empty() {
 			return Err(VError::Unknown);

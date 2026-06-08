@@ -17,7 +17,6 @@ use crate::{
 // |__|   |__|  |  |  |  |____|   |  |______________|    |______________________________|   |___|  |________________________________________________________________________________|
 // H-Len   ID   T Opt NT  Port    AT     Address                    Global ID              Opt-Len                                         Opt body
 
-#[inline(always)]
 async fn parse_target(
 	buff: &[u8],
 	resolver: &crate::resolver::RS,
@@ -200,7 +199,6 @@ where
 	Err(err)
 }
 
-#[inline(always)]
 pub async fn copy_u2t<W>(
 	datagram: &[u8],
 	addr: SocketAddr,
@@ -299,7 +297,6 @@ async fn handle_first_packet(
 	Ok(())
 }
 
-#[inline(always)]
 async fn handle_xudp_packets(
 	udp: &tokio::net::UdpSocket,
 	internal_buf: &mut DeqBuffer,

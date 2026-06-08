@@ -7,7 +7,6 @@ use crate::resolver::RS;
 use bytes::Bytes;
 use tokio::io::AsyncWrite;
 
-#[inline(always)]
 fn h2_builder(c: &crate::config::Xhttp) -> h2::server::Builder {
 	let mut h2_builder = h2::server::Builder::new();
 	if let Some(initial_connection_window_size) = c.initial_connection_window_size {
@@ -24,7 +23,6 @@ fn h2_builder(c: &crate::config::Xhttp) -> h2::server::Builder {
 	h2_builder
 }
 
-#[inline(always)]
 pub async fn xhttp_server(
 	resolver: RS,
 	tcp: tokio::net::TcpListener,
@@ -64,8 +62,6 @@ pub async fn xhttp_server(
 	}
 }
 
-#[allow(clippy::too_many_arguments)]
-#[inline(always)]
 async fn handle_h2_conn(
 	transport: &'static crate::config::Xhttp,
 	tls: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
@@ -319,7 +315,6 @@ async fn handle_h2_conn(
 	}
 }
 
-#[inline(always)]
 async fn stream_one(
 	(mut req, mut resp): (http::Request<h2::RecvStream>, h2::server::SendResponse<bytes::Bytes>),
 	resolver: RS,
@@ -399,7 +394,6 @@ struct Pu {
 	sender: tokio::sync::mpsc::Sender<bytes::Bytes>,
 }
 
-#[inline(always)]
 async fn stream_recv_timeout(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
 	let data = tokio::time::timeout(std::time::Duration::from_secs(12), rs.data())
 		.await?
@@ -415,7 +409,6 @@ async fn stream_recv_timeout(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> toki
 		.map_err(tokio::io::Error::other)
 }
 
-#[inline(always)]
 async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::io::Result<()> {
 	std::future::poll_fn(|cx| match rs.poll_data(cx) {
 		std::task::Poll::Ready(Some(Ok(data))) => {
@@ -430,7 +423,6 @@ async fn try_stream_recv(rs: &mut h2::RecvStream, vec: &mut Vec<u8>) -> tokio::i
 	.await
 }
 
-#[inline(always)]
 fn http_head_match(mut path: &str, headers: &http::HeaderMap, c_host: &Option<String>, c_path: &str) -> bool {
 	if path.is_empty() {
 		path = "/";
@@ -464,7 +456,6 @@ struct H2t<'a> {
 }
 
 impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
-	#[inline(always)]
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
 		match std::task::ready!(self.stream.0.poll_data(cx)) {
 			None => {
@@ -498,7 +489,6 @@ impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
 }
 
 impl<'a> AsyncWrite for H2t<'a> {
-	#[inline(always)]
 	fn poll_write(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
@@ -532,7 +522,6 @@ impl<'a> AsyncWrite for H2t<'a> {
 		}
 	}
 
-	#[inline(always)]
 	fn poll_flush(
 		self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,
@@ -540,7 +529,6 @@ impl<'a> AsyncWrite for H2t<'a> {
 		std::task::Poll::Ready(Ok(()))
 	}
 
-	#[inline(always)]
 	fn poll_shutdown(
 		self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,

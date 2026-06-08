@@ -1,4 +1,3 @@
-#[inline(always)]
 pub fn authenticate(vconn: &crate::vless::Vless, userip: std::net::SocketAddr) -> bool {
 	for user in &crate::CONFIG.users {
 		if user.uuid.as_bytes() == vconn.uuid.as_slice() {

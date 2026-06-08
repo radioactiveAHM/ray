@@ -34,8 +34,8 @@
         "file": "l.log" // set null to log to Stdout
     },
     "tls_buffer_limit": 64,
-    "tcp_proxy_buffer_size": [128, 128], // The internal buffer size (read, write) for the TCP proxy. Unit is Kb.
-    "udp_proxy_buffer_size": [8, 128], // The internal buffer size (read, write) for the UDP proxy. Unit is Kb.
+    "tcp_proxy_buffer_size": [16, 16], // The internal buffer size (read, write) for the TCP proxy. Unit is Kb.
+    "udp_proxy_buffer_size": [8, 16], // The internal buffer size (read, write) for the UDP proxy. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds.
     "udp_idle_timeout": 90, // UDP idle timeout in seconds.
     "users": [ // User list
@@ -117,8 +117,7 @@ HttpUpgrade
     "transporter": {
         "HttpUpgrade": {
             "path": "/",
-            "host": "example.com", // If set null any host will be accepted
-            "method": "GET"
+            "host": "example.com" // If set null any host will be accepted
         }
     }
 ```

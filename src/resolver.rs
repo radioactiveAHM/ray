@@ -50,7 +50,6 @@ pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
 	)
 }
 
-#[inline(always)]
 pub async fn resolve(resolver: &Resolver<TokioRuntimeProvider>, domain: &str, port: u16) -> Result<SocketAddr, VError> {
 	match resolver.lookup_ip(domain).await {
 		Ok(lookup) => {
