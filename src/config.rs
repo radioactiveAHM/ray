@@ -1,7 +1,6 @@
 #[derive(serde::Deserialize, Clone, Default)]
 #[allow(dead_code)]
 pub struct Opt {
-	pub tcp_read_buffered: bool,
 	pub interface: Option<String>,
 	pub bind_to_device: bool,
 	pub mss: Option<i32>,

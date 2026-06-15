@@ -287,40 +287,20 @@ where
 	let res: tokio::io::Result<()>;
 	loop {
 		match tokio::time::timeout(tcp_idle_timeout, async {
-			if opt.tcp_read_buffered {
-				tokio::select! {
-					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
-						if read.is_err() {
-							up_stream_closed = true;
-						}
-						read?;
-						target_w.write_all(client_buf_rb.filled()).await?;
-						target_w.flush().await
-					},
-					read = pipe::Fill(&mut target_r_pin, &mut target_buf_rb) => {
-						if !target_buf_rb.filled().is_empty(){
-							client_w.write_all(target_buf_rb.filled()).await?;
-							client_w.flush().await?;
-						}
-						read
-					},
-				}
-			} else {
-				tokio::select! {
-					read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
-						if read.is_err() {
-							up_stream_closed = true;
-						}
-						read?;
-						target_w.write_all(client_buf_rb.filled()).await?;
-						target_w.flush().await
-					},
-					read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
-						read?;
-						client_w.write_all(target_buf_rb.filled()).await?;
-						client_w.flush().await
-					},
-				}
+			tokio::select! {
+				read = pipe::Read(&mut client_r_pin, &mut client_buf_rb) => {
+					if read.is_err() {
+						up_stream_closed = true;
+					}
+					read?;
+					target_w.write_all(client_buf_rb.filled()).await?;
+					target_w.flush().await
+				},
+				read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
+					read?;
+					client_w.write_all(target_buf_rb.filled()).await?;
+					client_w.flush().await
+				},
 			}
 		})
 		.await
@@ -341,7 +321,7 @@ where
 		}
 	}
 
-	let tcp_idle_timeout = std::time::Duration::from_secs(3);
+	let tcp_idle_timeout = std::time::Duration::from_secs(12);
 	if up_stream_closed {
 		loop {
 			match tokio::time::timeout(tcp_idle_timeout, pipe::Read(&mut target_r_pin, &mut target_buf_rb)).await {
@@ -410,38 +390,19 @@ where
 	let res: tokio::io::Result<()>;
 	loop {
 		match tokio::time::timeout(tcp_idle_timeout, async {
-			if opt.tcp_read_buffered {
-				tokio::select! {
-					read = pipe::RecvBytes(&mut client_r_pin) => {
-						if read.is_err() {
-							up_stream_closed = true;
-						}
-						target_w.write_all(&read?).await?;
-						target_w.flush().await
-					},
-					read = pipe::Fill(&mut target_r_pin, &mut target_buf_rb) => {
-						if !target_buf_rb.filled().is_empty(){
-							client_w.write_all(target_buf_rb.filled()).await?;
-							client_w.flush().await?;
-						}
-						read
-					},
-				}
-			} else {
-				tokio::select! {
-					read = pipe::RecvBytes(&mut client_r_pin) => {
-						if read.is_err() {
-							up_stream_closed = true;
-						}
-						target_w.write_all(&read?).await?;
-						target_w.flush().await
-					},
-					read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
-						read?;
-						client_w.write_all(target_buf_rb.filled()).await?;
-						client_w.flush().await
-					},
-				}
+			tokio::select! {
+				read = pipe::RecvBytes(&mut client_r_pin) => {
+					if read.is_err() {
+						up_stream_closed = true;
+					}
+					target_w.write_all(&read?).await?;
+					target_w.flush().await
+				},
+				read = pipe::Read(&mut target_r_pin, &mut target_buf_rb) => {
+					read?;
+					client_w.write_all(target_buf_rb.filled()).await?;
+					client_w.flush().await
+				},
 			}
 		})
 		.await
@@ -462,7 +423,7 @@ where
 		}
 	}
 
-	let tcp_idle_timeout = std::time::Duration::from_secs(3);
+	let tcp_idle_timeout = std::time::Duration::from_secs(12);
 	if up_stream_closed {
 		loop {
 			match tokio::time::timeout(tcp_idle_timeout, pipe::Read(&mut target_r_pin, &mut target_buf_rb)).await {
@@ -578,7 +539,7 @@ where
 		}
 	}
 
-	let udp_idle_timeout = std::time::Duration::from_secs(3);
+	let udp_idle_timeout = std::time::Duration::from_secs(12);
 	if up_stream_closed {
 		loop {
 			match tokio::time::timeout(udp_idle_timeout, udp.recv(&mut udp_buf[2..])).await {
@@ -679,7 +640,7 @@ where
 		}
 	}
 
-	let udp_idle_timeout = std::time::Duration::from_secs(3);
+	let udp_idle_timeout = std::time::Duration::from_secs(12);
 	if up_stream_closed {
 		loop {
 			match tokio::time::timeout(udp_idle_timeout, udp.recv(&mut udp_buf[2..])).await {

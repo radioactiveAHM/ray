@@ -147,7 +147,8 @@ pub async fn packet_up(
 			.map_err(tokio::io::Error::other)?;
 
 		let mut h2t = H2t {
-			stream: (&mut recver, &mut w),
+			recv: &mut recver,
+			send: &mut w,
 		};
 
 		let res = match vless.rt {
@@ -176,19 +177,14 @@ pub async fn packet_up(
 }
 
 struct H2t<'a> {
-	stream: (
-		&'a mut tokio::sync::mpsc::Receiver<bytes::Bytes>,
-		&'a mut h2::SendStream<bytes::Bytes>,
-	),
+	recv: &'a mut tokio::sync::mpsc::Receiver<bytes::Bytes>,
+	send: &'a mut h2::SendStream<bytes::Bytes>,
 }
 
 impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
-		match std::task::ready!(self.stream.0.poll_recv(cx)) {
-			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
-				std::io::ErrorKind::ConnectionAborted,
-				"h2 stream read closed",
-			))),
+		match std::task::ready!(self.recv.poll_recv(cx)) {
+			None => std::task::Poll::Ready(Ok(bytes::Bytes::new())),
 			Some(data) => std::task::Poll::Ready(Ok(data)),
 		}
 	}
@@ -203,8 +199,8 @@ impl<'a> AsyncWrite for H2t<'a> {
 		let this = &mut *self;
 		let buflen = buf.len();
 
-		this.stream.1.reserve_capacity(buflen);
-		match std::task::ready!(this.stream.1.poll_capacity(cx)) {
+		this.send.reserve_capacity(buflen);
+		match std::task::ready!(this.send.poll_capacity(cx)) {
 			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
 				std::io::ErrorKind::ConnectionAborted,
 				"h2 stream closed",
@@ -217,8 +213,7 @@ impl<'a> AsyncWrite for H2t<'a> {
 				let to_send = std::cmp::min(available, buflen);
 				let chunk = &buf[..to_send];
 
-				this.stream
-					.1
+				this.send
 					.send_data(bytes::Bytes::copy_from_slice(chunk), false)
 					.map_err(tokio::io::Error::other)?;
 

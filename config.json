@@ -41,7 +41,6 @@
 	"outbounds": {
 		"direct": {
 			"opt": {
-				"tcp_read_buffered": true,
 				"interface": null,
 				"bind_to_device": false,
 				"mss": null,

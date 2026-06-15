@@ -63,7 +63,6 @@
     "outbounds": { // Map object of outbounds
         "direct": {
             "opt": {
-                "tcp_read_buffered": false,
                 "interface": null,
                 "bind_to_device": false,
                 "mss": null,

@@ -344,9 +344,13 @@ async fn stream_one(
 		.status(http::StatusCode::OK)
 		.body(())
 		.unwrap();
+
 	let mut w = resp.send_response(http_resp, false).map_err(tokio::io::Error::other)?;
+	let flow_control = req.body_mut().flow_control().clone();
 	let mut h2t = H2t {
-		stream: (req.body_mut(), &mut w),
+		recv: req.body_mut(),
+		send: &mut w,
+		flow_control,
 		cap: stream_window_size_cap * 1024,
 	};
 
@@ -451,33 +455,29 @@ fn http_head_match(mut path: &str, headers: &http::HeaderMap, c_host: &Option<St
 
 // utils
 struct H2t<'a> {
-	stream: (&'a mut h2::RecvStream, &'a mut h2::SendStream<bytes::Bytes>),
+	recv: &'a mut h2::RecvStream,
+	send: &'a mut h2::SendStream<bytes::Bytes>,
+	flow_control: h2::FlowControl,
 	cap: usize,
 }
 
 impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
-		match std::task::ready!(self.stream.0.poll_data(cx)) {
+		match std::task::ready!(self.recv.poll_data(cx)) {
 			None => {
-				let used = self.stream.0.flow_control().used_capacity();
+				let used = self.flow_control.used_capacity();
 				if used > 0 {
-					self.stream
-						.0
-						.flow_control()
+					self.flow_control
 						.release_capacity(used)
 						.map_err(tokio::io::Error::other)?;
 				}
-				std::task::Poll::Ready(Err(tokio::io::Error::new(
-					std::io::ErrorKind::ConnectionAborted,
-					"h2 stream read closed",
-				)))
+				std::task::Poll::Ready(Ok(Bytes::new()))
 			}
 			Some(data_res) => {
 				let data = data_res.map_err(tokio::io::Error::other)?;
-				let used = self.stream.0.flow_control().used_capacity();
+				let used = self.flow_control.used_capacity();
 				if used >= self.cap {
-					self.stream
-						.0
+					self.recv
 						.flow_control()
 						.release_capacity(used)
 						.map_err(tokio::io::Error::other)?;
@@ -497,8 +497,8 @@ impl<'a> AsyncWrite for H2t<'a> {
 		let this = &mut *self;
 		let buflen = buf.len();
 
-		this.stream.1.reserve_capacity(buflen);
-		match std::task::ready!(this.stream.1.poll_capacity(cx)) {
+		this.send.reserve_capacity(buflen);
+		match std::task::ready!(this.send.poll_capacity(cx)) {
 			None => std::task::Poll::Ready(Err(tokio::io::Error::new(
 				std::io::ErrorKind::ConnectionAborted,
 				"h2 stream closed",
@@ -511,8 +511,7 @@ impl<'a> AsyncWrite for H2t<'a> {
 				let to_send = std::cmp::min(available, buflen);
 				let chunk = &buf[..to_send];
 
-				this.stream
-					.1
+				this.send
 					.send_data(Bytes::copy_from_slice(chunk), false)
 					.map_err(tokio::io::Error::other)?;
 
