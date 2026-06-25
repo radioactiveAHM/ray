@@ -97,8 +97,6 @@ where
 	let mut w_buf = vec![0; w_upbs];
 	let mut w_buf = ReadBuf::new(&mut w_buf);
 
-	let mut client_r_pin = std::pin::Pin::new(client_r);
-
 	let err: tokio::io::Error;
 	loop {
 		match tokio::time::timeout(std::time::Duration::from_secs(crate::CONFIG.udp_idle_timeout), async {
@@ -107,7 +105,7 @@ where
 					let (dgram_len, addr) = res?;
 					copy_u2t(&r_buf[..dgram_len], addr, client_w, &domain_map).await
 				}
-				res = crate::pipe::Read(&mut client_r_pin, &mut w_buf) => {
+				res = crate::pipe::Read(std::pin::Pin::new(client_r), &mut w_buf) => {
 					res?;
 					internal_buffer.write(w_buf.filled());
 					handle_xudp_packets(&udp, &mut internal_buffer, &domain_map, &resolver).await
@@ -166,8 +164,6 @@ where
 
 	let mut r_buf: Vec<u8> = vec![0; r_upbs];
 
-	let mut client_r_pin = std::pin::Pin::new(client_r);
-
 	let err: tokio::io::Error;
 	loop {
 		match tokio::time::timeout(std::time::Duration::from_secs(crate::CONFIG.udp_idle_timeout), async {
@@ -176,7 +172,7 @@ where
 					let (dgram_len, addr) = res?;
 					copy_u2t(&r_buf[..dgram_len], addr, client_w, &domain_map).await
 				}
-				res = crate::pipe::RecvBytes(&mut client_r_pin) => {
+				res = crate::pipe::RecvBytes(client_r) => {
 					internal_buffer.write(&res?);
 					handle_xudp_packets(&udp, &mut internal_buffer, &domain_map, &resolver).await
 				}

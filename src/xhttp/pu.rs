@@ -59,7 +59,7 @@ pub async fn write_to_channel(
 		return;
 	}
 
-	let _ss_res = stream.1.send_response(
+	let _ = stream.1.send_response(
 		http::Response::builder()
 			.version(http::Version::HTTP_2)
 			.status(200)
