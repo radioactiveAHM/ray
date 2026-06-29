@@ -80,12 +80,11 @@ pub async fn stream_up(
 		None
 	};
 
-	let flow_control = w_stream.0.body_mut().flow_control().clone();
 	let mut h2t = super::H2t {
 		recv: w_stream.0.body_mut(),
 		send: &mut w,
-		flow_control,
 		cap: stream_window_size_cap * 1024,
+		used: 0,
 	};
 
 	let res = match vless.rt {

@@ -10,10 +10,11 @@ pub async fn recv_bytes_buffered(
 	cap: usize,
 ) -> Option<()> {
 	let mut recved = 0;
+	let mut used_cap = 0;
 	loop {
-		let used = stream_recver.flow_control().used_capacity();
-		if used >= cap {
-			let _ = stream_recver.flow_control().release_capacity(used);
+		if used_cap >= cap {
+			stream_recver.flow_control().release_capacity(used_cap).ok()?;
+			used_cap = 0;
 		}
 		if recved >= content_len {
 			break;
@@ -23,6 +24,7 @@ pub async fn recv_bytes_buffered(
 			Ok(None) => break,
 			Ok(Some(Ok(data))) => {
 				recved += data.len();
+				used_cap += data.len();
 				bytes_vec.push(data);
 			}
 		}

@@ -346,12 +346,11 @@ async fn stream_one(
 		.unwrap();
 
 	let mut w = resp.send_response(http_resp, false).map_err(tokio::io::Error::other)?;
-	let flow_control = req.body_mut().flow_control().clone();
 	let mut h2t = H2t {
 		recv: req.body_mut(),
 		send: &mut w,
-		flow_control,
 		cap: stream_window_size_cap * 1024,
+		used: 0,
 	};
 
 	let res = match vless.rt {
@@ -457,30 +456,23 @@ fn http_head_match(mut path: &str, headers: &http::HeaderMap, c_host: &Option<St
 struct H2t<'a> {
 	recv: &'a mut h2::RecvStream,
 	send: &'a mut h2::SendStream<bytes::Bytes>,
-	flow_control: h2::FlowControl,
 	cap: usize,
+	used: usize,
 }
 
 impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
 		match std::task::ready!(self.recv.poll_data(cx)) {
-			None => {
-				let used = self.flow_control.used_capacity();
-				if used > 0 {
-					self.flow_control
-						.release_capacity(used)
-						.map_err(tokio::io::Error::other)?;
-				}
-				std::task::Poll::Ready(Ok(Bytes::new()))
-			}
+			None => std::task::Poll::Ready(Ok(Bytes::new())),
 			Some(data_res) => {
 				let data = data_res.map_err(tokio::io::Error::other)?;
-				let used = self.flow_control.used_capacity();
-				if used >= self.cap {
+				self.used += data.len();
+				if self.used >= self.cap {
 					self.recv
 						.flow_control()
-						.release_capacity(used)
+						.release_capacity(self.used)
 						.map_err(tokio::io::Error::other)?;
+					self.used = 0;
 				}
 				std::task::Poll::Ready(Ok(data))
 			}
