@@ -12,12 +12,12 @@ pub async fn recv_bytes_buffered(
 	let mut recved = 0;
 	let mut used_cap = 0;
 	loop {
+		if recved >= content_len {
+			break;
+		}
 		if used_cap >= cap {
 			stream_recver.flow_control().release_capacity(used_cap).ok()?;
 			used_cap = 0;
-		}
-		if recved >= content_len {
-			break;
 		}
 		match tokio::time::timeout(std::time::Duration::from_secs(recv_timeout), stream_recver.data()).await {
 			Err(_) | Ok(Some(Err(_))) => return None,
