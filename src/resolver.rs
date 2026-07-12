@@ -1,4 +1,4 @@
-use std::{net::{Ipv4Addr, SocketAddr}, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use hickory_resolver::{Resolver, config::NameServerConfig, net::runtime::TokioRuntimeProvider};
 
@@ -51,10 +51,6 @@ pub fn generate_resolver(rc: &crate::config::Resolver) -> RS {
 }
 
 pub async fn resolve(resolver: &Resolver<TokioRuntimeProvider>, domain: &str, port: u16) -> Result<SocketAddr, VError> {
-	if domain=="self" {
-		return Ok(SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST), port))
-	}
-
 	match resolver.lookup_ip(domain).await {
 		Ok(lookup) => {
 			if let Some(ip) = lookup.iter().next() {

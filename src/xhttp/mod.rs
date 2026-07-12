@@ -302,14 +302,25 @@ async fn handle_h2_conn(
 			}
 			Some(Err(e)) => {
 				clean_up.await;
+				let dur = std::time::Duration::from_secs(1);
+				for _ in 0..12 {
+					if !h2c.has_streams() {
+						break;
+					}
+					tokio::time::sleep(dur).await;
+				}
 				return Err(tokio::io::Error::other(e));
 			}
 			None => {
 				clean_up.await;
-				return Err(tokio::io::Error::new(
-					std::io::ErrorKind::ConnectionAborted,
-					"h2 socket closed",
-				));
+				let dur = std::time::Duration::from_secs(1);
+				for _ in 0..12 {
+					if !h2c.has_streams() {
+						break;
+					}
+					tokio::time::sleep(dur).await;
+				}
+				return Ok(());
 			}
 		}
 	}

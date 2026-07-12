@@ -16,23 +16,24 @@ categories = [
 ]
 
 [dependencies]
-uuid = "1.23.4"
+uuid = "1.23.5"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "rt", "net", "io-util", "time", "sync"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 hickory-resolver = { version = "0.26.1", default-features = false, features = ["tokio", "https-aws-lc-rs", "h3-aws-lc-rs", "quic-aws-lc-rs", "tls-aws-lc-rs", "webpki-roots"] }
 tokio-websockets = { version = "0.13.3", features = ["server", "sha1_smol"] }
 futures-util = "0.3.32"
-bytes = "1.12.0"
+bytes = "1.12.1"
 libc = "0.2.186"
 log = "0.4.33"
 env_logger = "0.11.11"
 h2 = "0.4.15"
 http = "1.4.2"
 socket2 = "0.6.4"
-rand = "0.10.1"
+rand = "0.10.2"
 tokio-rustls = { version = "0.26.4", default-features = false, features = ["aws-lc-rs"] }
 rustls = {version = "0.23.41", default-features = false, features = ["aws_lc_rs", "std"]}
+httparse = "1.10.1"
 
 [profile.release]
 panic = "abort"
