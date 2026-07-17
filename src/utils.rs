@@ -26,14 +26,17 @@ impl DeqBuffer {
 		}
 	}
 
+	#[inline]
 	pub fn write(&mut self, buf: &[u8]) {
 		self.inner_buf.extend(buf);
 	}
 
+	#[inline]
 	pub fn slice(&self) -> &[u8] {
 		self.inner_buf.as_slices().0
 	}
 
+	#[inline]
 	pub fn remove(&mut self, len: usize) {
 		self.inner_buf.drain(..len);
 	}

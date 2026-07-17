@@ -73,6 +73,7 @@ impl<S> crate::ioutils::AsyncRecvBytes for &mut Wst<S>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
+	#[inline]
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
 		if self.closed {
 			return std::task::Poll::Ready(Err(crate::verror::VError::WsClosed.into()));
@@ -104,18 +105,21 @@ impl<S> AsyncWrite for Wst<S>
 where
 	S: AsyncRead + AsyncWrite + Unpin,
 {
+	#[inline]
 	fn poll_flush(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
 	) -> std::task::Poll<Result<(), std::io::Error>> {
 		self.ws.poll_flush_unpin(cx).map_err(tokio::io::Error::other)
 	}
+	#[inline]
 	fn poll_shutdown(
 		self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,
 	) -> std::task::Poll<Result<(), std::io::Error>> {
 		std::task::Poll::Ready(Ok(()))
 	}
+	#[inline]
 	fn poll_write(
 		mut self: std::pin::Pin<&mut Self>,
 		_cx: &mut std::task::Context<'_>,

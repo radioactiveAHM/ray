@@ -7,6 +7,7 @@ where
 {
 	type Output = tokio::io::Result<()>;
 
+	#[inline]
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		let this = &mut *self;
 		this.1.clear();
@@ -27,6 +28,7 @@ where
 {
 	type Output = tokio::io::Result<bytes::Bytes>;
 
+	#[inline]
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		std::task::ready!(self.0.poll_recv_bytes(cx).map_ok(|b| {
 			if b.is_empty() {

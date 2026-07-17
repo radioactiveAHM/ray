@@ -184,6 +184,7 @@ struct H2t<'a> {
 }
 
 impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
+	#[inline]
 	fn poll_recv_bytes(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<tokio::io::Result<bytes::Bytes>> {
 		match std::task::ready!(self.recv.poll_recv(cx)) {
 			None => std::task::Poll::Ready(Ok(bytes::Bytes::new())),
@@ -193,6 +194,7 @@ impl<'a> crate::ioutils::AsyncRecvBytes for &mut H2t<'a> {
 }
 
 impl<'a> AsyncWrite for H2t<'a> {
+	#[inline]
 	fn poll_write(
 		mut self: std::pin::Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,

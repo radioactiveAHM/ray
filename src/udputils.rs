@@ -4,6 +4,7 @@ pub struct UdpWriter<'a> {
 	pub b: utils::DeqBuffer,
 }
 impl<'a> UdpWriter<'a> {
+	#[inline]
 	pub async fn send_packets(&mut self, buf: &[u8]) -> tokio::io::Result<()> {
 		if buf.is_empty() {
 			return Ok(());
