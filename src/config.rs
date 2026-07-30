@@ -99,20 +99,6 @@ impl Transporter {
 	}
 }
 
-fn deserialize_uuid<'de, D>(deserializer: D) -> Result<uuid::Uuid, D::Error>
-where
-	D: serde::Deserializer<'de>,
-{
-	uuid::Uuid::try_parse(&<String as serde::Deserialize>::deserialize(deserializer)?).map_err(serde::de::Error::custom)
-}
-
-#[derive(serde::Deserialize)]
-pub struct User {
-	pub name: String,
-	#[serde(deserialize_with = "deserialize_uuid")]
-	pub uuid: uuid::Uuid,
-}
-
 #[derive(serde::Deserialize, Clone, Copy)]
 pub enum ResolvingMode {
 	/// Only query for A (Ipv4) records
@@ -216,7 +202,7 @@ pub struct Config {
 	pub udp_proxy_buffer_size: (usize, usize),
 	pub tcp_idle_timeout: u64,
 	pub udp_idle_timeout: u64,
-	pub users: Vec<User>,
+	pub users: std::collections::HashMap<uuid::Uuid, String>,
 	pub inbounds: Vec<Inbound>,
 	pub outbounds: std::collections::HashMap<String, Outbound>,
 	pub resolver: Resolver,

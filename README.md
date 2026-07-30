@@ -34,16 +34,13 @@
         "file": "l.log" // set null to log to Stdout
     },
     "tls_buffer_limit": 64,
-    "tcp_proxy_buffer_size": [16, 16], // The internal buffer size (read, write) for the TCP proxy. Unit is Kb.
-    "udp_proxy_buffer_size": [8, 16], // The internal buffer size (read, write) for the UDP proxy. Unit is Kb.
+    "tcp_proxy_buffer_size": [64, 64], // The internal buffer size (read, write) for the TCP proxy. Unit is Kb.
+    "udp_proxy_buffer_size": [8, 64], // The internal buffer size (read, write) for the UDP proxy. Unit is Kb.
     "tcp_idle_timeout": 150, // TCP idle timeout in seconds.
     "udp_idle_timeout": 90, // UDP idle timeout in seconds.
-    "users": [ // User list
-        {
-            "name": "admin",
-            "uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
-        }
-    ],
+    "users": { // Users Map object
+        "a18b0775-2669-5cfc-b5e8-99bd5fd70884": "admin" // UUID:Name
+    },
     "inbounds":[
         // inbound objects
         {
@@ -140,16 +137,16 @@ XHTTP
         "XHTTP" : {
             "path": "/",
             "host": "example.com", // If set null any host will be accepted.
-            "max_frame_size": 16, // Must be less or equal to tcp_proxy_buffer_size and at least 16kb. Unit is Kb.
-            "max_send_buffer_size": 1024, // Sets the maximum send buffer size per stream. Unit is Kb.
-            "initial_connection_window_size": 16384, // Indicates the initial window size (in octets) for connection-level flow control for received data. Unit is Kb.
-            "initial_window_size": 1024, // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.
+            "max_frame_size": 64, // Must be less or equal to tcp_proxy_buffer_size and at least 16kb. Unit is Kb.
+            "max_send_buffer_size": 65536, // Sets the maximum send buffer size per stream. Unit is Kb.
+            "initial_connection_window_size": 65536, // Indicates the initial window size (in octets) for connection-level flow control for received data. Unit is Kb.
+            "initial_window_size": 16384, // Indicates the initial window size (in octets) for stream-level flow control for received data. Unit is Kb.
             // stream-up/stream-one/packet-up
-            "stream_window_size_cap": 512, // suggested (initial_window_size/2)
+            "stream_window_size_cap": 15360, // suggested (initial_window_size/2)
             // stream-up
             "stream_up_keepalive": [[60, 90], [10, 128]], //up-stream data link keep-alive. [duration(sec)[min-max], bytes[min, max]]. set null to disable.
             // packet-up
-            "initial_channel_size": 8, // Defines the initial channel size used for POST data and the buffer capacity for POST request data frames.
+            "initial_channel_size": 32, // Defines the initial channel size used for POST data and the buffer capacity for POST request data frames.
             "recv_timeout": 12 // Defines the timeout (in seconds) applied to each POST request when awaiting a data frame.
         }
     }

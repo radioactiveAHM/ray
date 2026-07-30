@@ -17,12 +17,9 @@
 	"udp_proxy_buffer_size": [8, 16],
 	"tcp_idle_timeout": 150,
 	"udp_idle_timeout": 60,
-	"users": [
-		{
-			"name": "admin",
-			"uuid": "a18b0775-2669-5cfc-b5e8-99bd5fd70884"
-		}
-	],
+	"users": {
+		"a18b0775-2669-5cfc-b5e8-99bd5fd70884": "admin"
+	},
 	"inbounds": [
 		{
 			"listen": "0.0.0.0:80",

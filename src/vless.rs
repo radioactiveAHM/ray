@@ -97,7 +97,7 @@ impl Display for RequestCommand {
 }
 
 pub struct Vless {
-	pub uuid: [u8; 16],
+	pub uuid: uuid::Uuid,
 	pub rt: RequestCommand,
 	pub target: Option<(SocketAddr, Option<String>, usize)>,
 }
@@ -113,25 +113,17 @@ impl Vless {
 
 		if buff.len() >= 19 && *buff.get(18).ok_or(VError::Unknown)? == 3 {
 			// mux
-			let mut v = Self {
-				uuid: [0; 16],
+			return Ok(Self {
+				uuid: uuid::Uuid::from_slice(&buff[1..17]).map_err(|_| VError::UuidErr)?,
 				rt: parse_socket(buff[18])?,
 				target: None,
-			};
-
-			v.uuid.copy_from_slice(&buff[1..17]);
-
-			return Ok(v);
+			});
 		}
 
-		let mut v = Self {
-			uuid: [0; 16],
+		Ok(Self {
+			uuid: uuid::Uuid::from_slice(&buff[1..17]).map_err(|_| VError::UuidErr)?,
 			rt: parse_socket(buff[18])?,
 			target: Some(parse_target(buff, resolver).await?),
-		};
-
-		v.uuid.copy_from_slice(&buff[1..17]);
-
-		Ok(v)
+		})
 	}
 }

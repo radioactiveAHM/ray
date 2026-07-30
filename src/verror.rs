@@ -19,6 +19,7 @@ pub enum VError {
 	UdpDeadLoop,
 	MailFormedUdpPacket,
 	WsClosed,
+	UuidErr,
 }
 impl Display for VError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -40,6 +41,7 @@ impl Display for VError {
 			VError::ResolveDnsFailed => write!(f, "ResolveDnsFailed"),
 			VError::BufferOverflow => write!(f, "BufferOverflow"),
 			VError::WsClosed => write!(f, "WS Close Frame Received"),
+			VError::UuidErr => write!(f, "parse UUID failed"),
 		}
 	}
 }
