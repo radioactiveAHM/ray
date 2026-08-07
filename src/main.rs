@@ -243,7 +243,7 @@ where
 		log::warn!("{peer_addr}: closed connection")
 	}
 
-	stream.shutdown().await
+	Ok(())
 }
 
 async fn handle_tcp<S>(
@@ -358,7 +358,6 @@ where
 		}
 	}
 
-	let _ = target_w.shutdown().await;
 	res
 }
 
@@ -463,7 +462,6 @@ where
 		}
 	}
 
-	let _ = target_w.shutdown().await;
 	res
 }
 
