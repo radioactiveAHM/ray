@@ -22,7 +22,7 @@ fn h2_builder(c: &crate::config::Xhttp) -> h2::server::Builder {
 	h2_builder.max_concurrent_reset_streams(128);
 	h2_builder.max_pending_accept_reset_streams(64);
 
-	h2_builder.data_frame_budget(1024*1024);
+	h2_builder.data_frame_budget(1024 * 1024);
 	h2_builder.max_frame_size(c.max_frame_size * 1024);
 
 	h2_builder
