@@ -1,5 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 mod auth;
 mod config;
@@ -177,23 +177,14 @@ where
 	// Handle transporters
 	match &transport {
 		config::Transporter::TCP => {
-			size = stream.read(&mut buff).await?;
+			size = ioutils::simple_read_with_eof(&mut stream, &mut buff).await?;
+			size += ioutils::simple_try_read_with_eof(&mut stream, &mut buff[size..]).await?;
 		}
 		config::Transporter::HttpUpgrade(http) => {
-			size = stream.read(&mut buff).await?;
+			size = ioutils::simple_read_with_eof(&mut stream, &mut buff).await?;
 			transporters::httpupgrade_transporter(http, &buff[..size], &mut stream).await?;
-			size = stream.read(&mut buff).await?;
-		}
-		config::Transporter::HTTP(http) => {
-			size = stream.read(&mut buff).await?;
-			if let Some(p) = utils::catch_in_buff(b"\r\n\r\n", &buff) {
-				let head = &buff[..p.1];
-				transporters::http_transporter(http, head, &mut stream).await?;
-				size -= buff.drain(..p.1).len();
-				stream.write_all(b"HTTP/1.1 200 Ok\r\n\r\n").await?;
-			} else {
-				return Err(crate::verror::VError::TransporterError.into());
-			}
+			size = ioutils::simple_read_with_eof(&mut stream, &mut buff).await?;
+			size += ioutils::simple_try_read_with_eof(&mut stream, &mut buff[size..]).await?;
 		}
 		config::Transporter::WS(ws_options) => {
 			drop(buff);

@@ -5,7 +5,6 @@
 
 ## Transports
 
-- [x] HTTP
 - [x] HTTP Upgrade
 - [x] WS (WebSocket)
 - [x] XHTTP H2 stream-one, stream-up, packet-up
@@ -93,18 +92,6 @@ TCP
 
 ```json
     "transporter": "TCP"
-```
-
-HTTP
-
-```json
-    "transporter": {
-        "HTTP": {
-            "path": "/",
-            "host": "example.com", // If set null any host will be accepted
-            "method": "GET"
-        }
-    }
 ```
 
 HttpUpgrade

@@ -40,15 +40,9 @@ pub struct Tls {
 	pub key: String,
 }
 
-fn default_method() -> String {
-	String::from("GET")
-}
-
 #[derive(serde::Deserialize, Clone)]
 pub struct Http {
 	pub path: String,
-	#[serde(default = "default_method")]
-	pub method: String,
 	pub host: Option<String>,
 }
 
@@ -84,7 +78,6 @@ pub struct Xhttp {
 #[allow(clippy::upper_case_acronyms)]
 pub enum Transporter {
 	TCP,
-	HTTP(Http),
 	HttpUpgrade(Http),
 	WS(Ws),
 	XHTTP(Xhttp),

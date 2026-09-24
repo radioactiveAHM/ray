@@ -11,57 +11,29 @@ where
 {
 	if let Ok(http) = core::str::from_utf8(buff) {
 		if let Some(host) = &chttp.host
-			&& !http.contains(host.as_str())
+			&& !http.contains(&format!("Host: {}\r\n", host))
 		{
 			return Err(crate::verror::VError::TransporterError.into());
 		}
 
-		if let Some(head) = http.lines().next() {
-			if head != format!("{} {} HTTP/1.1", chttp.method, chttp.path) {
+		let head = format!("GET {} HTTP/1.1", chttp.path);
+		if let Some(line) = http.lines().next() {
+			if line == head {
+				stream
+					.write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+					.await
+			} else {
 				stream
 					.write_all(b"HTTP/1.1 404 Not Found\r\nconnection: close\r\n\r\n")
 					.await?;
-				return Err(crate::verror::VError::TransporterError.into());
+				Err(crate::verror::VError::TransporterError.into())
 			}
 		} else {
-			return Err(crate::verror::VError::TransporterError.into());
+			Err(crate::verror::VError::TransporterError.into())
 		}
 	} else {
-		return Err(crate::verror::VError::UTF8Err.into());
+		Err(crate::verror::VError::UTF8Err.into())
 	}
-
-	stream
-		.write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
-		.await
-}
-
-pub async fn http_transporter<S>(chttp: &crate::config::Http, buff: &[u8], stream: &mut S) -> tokio::io::Result<()>
-where
-	S: AsyncRead + AsyncWrite + Unpin,
-{
-	if let Ok(http) = core::str::from_utf8(buff) {
-		// if there is no host
-		// i'm too lazy to parse http headers :D
-		if let Some(host) = &chttp.host
-			&& !http.contains(host.as_str())
-		{
-			return Err(crate::verror::VError::TransporterError.into());
-		}
-		if let Some(head) = http.lines().next() {
-			if head != format!("{} {} HTTP/1.1", chttp.method, chttp.path) {
-				stream
-					.write_all(b"HTTP/1.1 404 Not Found\r\nconnection: close\r\n\r\n")
-					.await?;
-				return Err(crate::verror::VError::TransporterError.into());
-			}
-		} else {
-			return Err(crate::verror::VError::TransporterError.into());
-		}
-	} else {
-		return Err(crate::verror::VError::UTF8Err.into());
-	}
-
-	Ok(())
 }
 
 struct Wst<S: AsyncRead + AsyncWrite + Unpin> {
